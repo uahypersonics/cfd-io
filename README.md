@@ -93,9 +93,16 @@ To publish a new version to [PyPI](https://pypi.org/project/cfd-io/):
 3. Commit and push to `main`
 4. Tag and push:
    ```bash
-   git tag vMAJOR.MINOR.PATCH
+   git tag -a vMAJOR.MINOR.PATCH -m "Release vMAJOR.MINOR.PATCH"
    git push origin vMAJOR.MINOR.PATCH
    ```
+
+Use a signed tag when your GPG/SSH signing is configured:
+
+```bash
+git tag -s vMAJOR.MINOR.PATCH -m "Release vMAJOR.MINOR.PATCH"
+git push origin vMAJOR.MINOR.PATCH
+```
 
 The GitHub Actions workflow will automatically build and publish to PyPI via Trusted Publishing.
 
