@@ -22,11 +22,11 @@ pip install cfd-io
 from cfd_io import read_file, write_file, get_info
 
 # inspect a file
-info = get_info("flow.s8")
+info = get_info("flow.h5")
 print(info.nx, info.ny, info.var_names)
 
 # read data
-grid, flow, attrs = read_file("flow.s8", grid_file="grid.s8")
+grid, flow, attrs = read_file("flow.h5")
 
 # write to a different format
 write_file("flow.h5", grid, flow, attrs)
@@ -43,10 +43,10 @@ write_file("flow.h5", grid, flow, attrs)
 
 ```bash
 # convert between formats
-cfd-io convert flow.s8 flow.h5 --grid grid.s8
+cfd-io convert grid.x grid.h5
 
 # inspect a file
-cfd-io info flow.s8
+cfd-io info grid.h5
 ```
 
 ## Testing
