@@ -30,7 +30,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install mkdocs-material mkdocstrings[python]
+          pip install "mkdocs>=1.5,<2" mkdocs-material mkdocstrings[python]
           pip install -e .
 
       - name: Build documentation
