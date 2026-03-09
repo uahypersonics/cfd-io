@@ -2,6 +2,8 @@
 
 I/O toolkit for structured CFD data: read, write, and convert between formats.
 
+[![Test](https://github.com/uahypersonics/cfd-io/actions/workflows/test.yml/badge.svg)](https://github.com/uahypersonics/cfd-io/actions/workflows/test.yml)
+[![codecov](https://codecov.io/gh/uahypersonics/cfd-io/branch/main/graph/badge.svg)](https://codecov.io/gh/uahypersonics/cfd-io)
 [![PyPI](https://img.shields.io/pypi/v/cfd-io)](https://pypi.org/project/cfd-io/)
 [![Docs](https://img.shields.io/badge/docs-mkdocs-blue)](https://uahypersonics.github.io/cfd-io/)
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](LICENSE)
