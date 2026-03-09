@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "cfd-io"
+abstract: "Read, write, and convert structured CFD data between formats"
+type: software
+authors:
+  - family-names: "Hader"
+    given-names: "Christoph"
+    affiliation: "University of Arizona"
+    orcid: "https://orcid.org/0000-0002-0956-000X"
+repository-code: "https://github.com/uahypersonics/cfd-io"
+url: "https://uahypersonics.github.io/cfd-io"
+license: BSD-3-Clause
+keywords:
+  - computational fluid dynamics
+  - structured grids
+  - file formats
+  - Plot3D
+  - HDF5
+  - Tecplot
+  - Fortran binary

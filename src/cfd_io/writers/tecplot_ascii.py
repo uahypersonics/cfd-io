@@ -1,0 +1,135 @@
+"""Tecplot ASCII (``.dat``) writer.
+
+Writes structured-grid Tecplot ASCII files in POINT data packing.
+2-D and 3-D grids are supported.  Grid-only output (no flow variables)
+is allowed.
+
+Output format::
+
+    TITLE = "cfd-io"
+    VARIABLES = "x", "y", "uvel", "vvel"
+    ZONE T="Zone 1", I=100, J=50, K=1, F=POINT
+    0.000000E+00  0.000000E+00  1.000000E+00  0.000000E+00
+    ...
+"""
+
+# --------------------------------------------------
+# load necessary modules
+# --------------------------------------------------
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+
+# --------------------------------------------------
+# set up logger
+# --------------------------------------------------
+logger = logging.getLogger(__name__)
+
+
+# --------------------------------------------------
+# public API
+# --------------------------------------------------
+
+# write grid and optional flow to a Tecplot ASCII .dat file
+def write_tecplot_ascii(
+    fpath: str | Path,
+    grid: dict[str, np.ndarray],
+    flow: dict[str, np.ndarray] | None = None,
+    attrs: dict[str, Any] | None = None,
+    *,
+    title: str = "cfd-io",
+    zone_title: str = "Zone 1",
+) -> Path:
+    """Write grid (and optional flow) to a Tecplot ASCII ``.dat`` file.
+
+    Args:
+        fpath: Output file path.
+        grid: Grid arrays ``{"x": (ni, nj, nk), "y": ..., "z": ...}``.
+        flow: Flow arrays ``{"uvel": (ni, nj, nk), ...}``.
+            ``None`` or ``{}`` for grid-only output.
+        attrs: Optional metadata.  If ``"title"`` is present it
+            overrides the *title* argument.
+        title: Tecplot TITLE string.
+        zone_title: Tecplot ZONE T string.
+
+    Returns:
+        Path to the created file.
+
+    Raises:
+        ValueError: If grid is empty or missing ``"x"`` / ``"y"``.
+    """
+    # convert to Path object
+    fpath = Path(fpath)
+
+    # validate inputs
+    if not grid:
+        raise ValueError("grid dict must not be empty")
+    if "x" not in grid or "y" not in grid:
+        raise ValueError("grid must contain at least 'x' and 'y'")
+
+    # default empty dicts for optional arguments
+    safe_flow = flow or {}
+    safe_attrs = attrs or {}
+
+    # allow title override from attrs metadata
+    if "title" in safe_attrs:
+        title = str(safe_attrs["title"])
+
+    # -- determine dimensions from first grid array -----------------------
+    x = grid["x"]
+    if x.ndim != 3:
+        raise ValueError(f"expected 3-D arrays, got ndim={x.ndim}")
+
+    ni, nj, nk = x.shape
+
+    # -- build ordered variable list: grid coords first, then flow ---------
+    var_order: list[str] = []
+    all_arrays: list[np.ndarray] = []
+
+    # add grid coordinate variables in canonical order (x, y, z)
+    for name in ("x", "y", "z"):
+        if name in grid:
+            var_order.append(name)
+            all_arrays.append(grid[name])
+
+    # add flow variables after grid coordinates
+    for name, arr in safe_flow.items():
+        var_order.append(name)
+        all_arrays.append(arr)
+
+    n_vars = len(var_order)
+    n_points = ni * nj * nk
+
+    # -- write file --------------------------------------------------------
+    with open(fpath, "w") as fobj:
+
+        # write header: TITLE, VARIABLES, ZONE lines
+        fobj.write(f'TITLE = "{title}"\n')
+
+        var_str = ", ".join(f'"{ v}"' for v in var_order)
+        fobj.write(f"VARIABLES = {var_str}\n")
+
+        fobj.write(
+            f'ZONE T="{zone_title}", I={ni}, J={nj}, K={nk}, F=POINT\n'
+        )
+
+        # flatten each array in Fortran order (i-fastest, j, k)
+        flat_arrays = []
+        for arr in all_arrays:
+            flat_arrays.append(arr.ravel(order="F"))
+
+        # write data: one line per grid point, all variables on one line
+        for p in range(n_points):
+            vals = " ".join(f"{flat_arrays[v][p]:16.8E}" for v in range(n_vars))
+            fobj.write(vals + "\n")
+
+    logger.info(
+        "wrote %s  (%dx%dx%d, %d vars, POINT format)",
+        fpath, ni, nj, nk, n_vars,
+    )
+
+    return fpath
