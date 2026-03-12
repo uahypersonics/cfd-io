@@ -23,7 +23,7 @@ from typing import Any
 import numpy as np
 
 from cfd_io.dataset import Dataset, Field, StructuredGrid
-from cfd_io.readers._aliases import normalize
+from cfd_io.readers._aliases import VECTOR_COMPONENTS, normalize
 
 # --------------------------------------------------
 # set up logger
@@ -274,34 +274,6 @@ def _extract_nodes(cell_grid, conn, points):
     return node_grid
 
 
-# ── SU2 variable mapping ─────────────────────────────────────────────────────
-
-# Map SU2 PointData names to cfd-io canonical names via _aliases.normalize,
-# with a few SU2-specific overrides.
-_SU2_ALIASES: dict[str, str] = {
-    "velocity": "vel",
-    "momentum": "momentum",
-    "mach": "mach",
-    "energy": "energy",
-    "skin_friction_coefficient": "cf",
-    "pressure_coefficient": "cp",
-    "laminar_viscosity": "mu",
-    "heat_flux": "qw",
-    "y_plus": "yplus",
-    "residual_density": "res_dens",
-    "residual_momentum": "res_momentum",
-    "residual_energy": "res_energy",
-}
-
-
-def _map_var_name(raw_name: str) -> str:
-    """Convert a raw SU2 variable name to a canonical cfd-io name."""
-    key = raw_name.lower().strip()
-    if key in _SU2_ALIASES:
-        return _SU2_ALIASES[key]
-    return normalize(raw_name)
-
-
 # ── public API ────────────────────────────────────────────────────────────────
 
 
@@ -346,15 +318,21 @@ def read_vtu(
 
     # Build flow dict
     flow: dict[str, np.ndarray] = {}
-    for raw_name, arr in raw_data.items():
-        canon = _map_var_name(raw_name)
+
+    # loop over all raw data arrays and assign to flow dict with shape (ni+1, nj+1, 1)
+    for var_name, arr in raw_data.items():
+
+        # normalize variable name -> rename according to _aliase.py scheme and convert to lowercase
+        var_name_normalized = normalize(var_name)
         if arr.ndim == 1:
-            flow[canon] = arr[node_grid][:, :, np.newaxis]
+            flow[var_name_normalized] = arr[node_grid][:, :, np.newaxis]
         else:
             # Vector quantity — split into components
-            suffixes = ["_x", "_y", "_z"]
+            names = VECTOR_COMPONENTS.get(
+                var_name_normalized, (f"{var_name_normalized}_x", f"{var_name_normalized}_y", f"{var_name_normalized}_z")
+            )
             for k in range(arr.shape[1]):
-                flow[f"{canon}{suffixes[k]}"] = arr[node_grid, k][:, :, np.newaxis]
+                flow[names[k]] = arr[node_grid, k][:, :, np.newaxis]
 
     attrs: dict[str, Any] = {
         "format": "vtu",

@@ -41,6 +41,21 @@ VAR_ALIASES: dict[str, str] = {
     "density": "dens",
     # mach number
     "m": "mach",
+    # su2 variable names
+    "velocity": "vel",
+    "skin_friction_coefficient": "cf",
+    "pressure_coefficient": "cp",
+    "laminar_viscosity": "mu",
+    "heat_flux": "qw",
+}
+
+# --------------------------------------------------
+# vector component names
+# when a reader splits a multi-component array, it looks here first;
+# default fallback is base_x, base_y, base_z
+# --------------------------------------------------
+VECTOR_COMPONENTS: dict[str, tuple[str, str, str]] = {
+    "vel": ("uvel", "vvel", "wvel"),
 }
 
 
