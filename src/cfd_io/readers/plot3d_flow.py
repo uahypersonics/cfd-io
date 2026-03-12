@@ -12,9 +12,10 @@ from __future__ import annotations
 import logging
 import struct
 from pathlib import Path
-from typing import Any
 
 import numpy as np
+
+from cfd_io.dataset import Dataset, Field, StructuredGrid
 
 # --------------------------------------------------
 # set up logger
@@ -27,7 +28,7 @@ logger = logging.getLogger(__name__)
 # --------------------------------------------------
 def read_plot3d_flow(
     fpath: str | Path,
-) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], dict[str, Any]]:
+) -> Dataset:
     """Read a Plot3D solution file (ASCII or binary, 2-D or 3-D).
 
     The file format is auto-detected by inspecting the first 4 bytes.
@@ -63,8 +64,6 @@ def read_plot3d_flow(
         flow, attrs = read_plot3d_flow_ascii(fpath)
 
     # .q files contain no grid data
-    grid: dict[str, np.ndarray] = {}
-
     n_vars = len(flow)
     first = next(iter(flow.values()))
     logger.info(
@@ -72,7 +71,13 @@ def read_plot3d_flow(
         n_vars, first.shape, fpath,
     )
 
-    return grid, flow, attrs
+    # .q files have no grid -- use a placeholder StructuredGrid from flow shape
+    dummy = np.zeros(first.shape)
+    return Dataset(
+        grid=StructuredGrid(dummy, dummy, dummy),
+        flow={k: Field(v) for k, v in flow.items()},
+        attrs=attrs,
+    )
 
 
 # --------------------------------------------------

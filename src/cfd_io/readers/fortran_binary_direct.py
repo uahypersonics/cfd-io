@@ -685,4 +685,10 @@ def read_binary_direct(
     # debug output for devs
     logger.info("loaded grid (%d vars) + flow (%d vars)", len(grid), len(flow))
 
-    return grid, flow, attrs
+    from cfd_io.dataset import Dataset, Field, StructuredGrid
+
+    return Dataset(
+        grid=StructuredGrid(grid["x"], grid["y"], grid.get("z", np.zeros_like(grid["x"]))),
+        flow={k: Field(v) for k, v in flow.items()},
+        attrs=attrs,
+    )

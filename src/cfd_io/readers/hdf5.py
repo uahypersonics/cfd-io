@@ -30,6 +30,7 @@ from typing import Any
 import h5py
 import numpy as np
 
+from cfd_io.dataset import Dataset, Field, StructuredGrid
 from cfd_io.readers._aliases import GRID_NAMES, normalize
 
 # --------------------------------------------------
@@ -44,7 +45,7 @@ logger = logging.getLogger(__name__)
 def read_hdf5(
     fpath: str | Path,
     timestep: int | None = None,
-) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], dict[str, Any]]:
+) -> Dataset:
     """Read a CFD HDF5 file into dict-of-arrays form.
 
     Automatically detects the layout:
@@ -170,8 +171,23 @@ def read_hdf5(
             "read_hdf5: grid found but no flow data in %s", fpath,
         )
 
-    # return grid and flow dicts, plus attrs dict
-    return grid, flow, attrs
+    # Dataset = single snapshot.  If multi-timestep, pick the first.
+    if isinstance(flow, dict) and flow and isinstance(next(iter(flow.values())), dict):
+        first_key = min(flow.keys())
+        flat_flow: dict[str, np.ndarray] = flow[first_key]
+        logger.info("read_hdf5: multi-timestep -- returning timestep %d", first_key)
+    else:
+        flat_flow = flow
+
+    z = grid.get("z", np.zeros_like(grid["x"])) if grid else np.array([[[0.0]]])
+    x = grid.get("x", np.array([[[0.0]]]))
+    y = grid.get("y", np.array([[[0.0]]]))
+
+    return Dataset(
+        grid=StructuredGrid(x, y, z),
+        flow={k: Field(v) for k, v in flat_flow.items()},
+        attrs=attrs,
+    )
 
 
 # return sorted list of integer timestep keys from flow group

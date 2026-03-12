@@ -19,9 +19,8 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
 
-import numpy as np
+from cfd_io.dataset import Dataset, StructuredGrid
 
 # --------------------------------------------------
 # set up logger
@@ -52,26 +51,20 @@ def _require_pytecplot() -> None:
 # write a Tecplot binary .plt file via pytecplot
 def write_tecplot_plt(
     fpath: str | Path,
-    grid: dict[str, np.ndarray],
-    flow: dict[str, np.ndarray] | None = None,
-    attrs: dict[str, Any] | None = None,
-) -> None:
-    """Write a Tecplot binary ``.plt`` file.
+    dataset: Dataset,
+) -> Path:
+    """Write a `Dataset` to a Tecplot binary ``.plt`` file.
 
     Requires ``pytecplot`` (optional dependency).  Creates a single
     ordered zone with all grid and flow variables.
 
     Args:
         fpath: Output ``.plt`` file path.
-        grid: Grid arrays, e.g. ``{"x": (ni, nj, nk), ...}``.
-        flow: Flow arrays, e.g. ``{"uvel": (ni, nj, nk), ...}``.
-              May be ``None`` or ``{}`` for grid-only output.
-        attrs: Optional metadata.  ``"zone_title"`` is used as the
-               zone name if present.
+        dataset: Dataset to write.
 
     Raises:
         ImportError: If ``pytecplot`` is not installed.
-        ValueError: If *grid* is empty.
+        TypeError: If the grid is not a `StructuredGrid`.
     """
     # check that pytecplot is available before proceeding
     _require_pytecplot()
@@ -82,15 +75,13 @@ def write_tecplot_plt(
     # convert to Path object
     fpath = Path(fpath)
 
-    # validate inputs
-    if not grid:
-        raise ValueError("grid must contain at least one variable")
+    if not isinstance(dataset.grid, StructuredGrid):
+        raise TypeError("write_tecplot_plt requires a StructuredGrid")
 
-    # default empty dicts for optional arguments
-    if flow is None:
-        flow = {}
-    if attrs is None:
-        attrs = {}
+    # unpack Dataset
+    grid = {"x": dataset.grid.x, "y": dataset.grid.y, "z": dataset.grid.z}
+    flow = {k: v.data for k, v in dataset.flow.items()}
+    attrs = dataset.attrs or {}
 
     # build ordered variable name list: grid vars first (x, y, z), then flow
     grid_names = [k for k in ("x", "y", "z") if k in grid]

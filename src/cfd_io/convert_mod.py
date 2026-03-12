@@ -26,7 +26,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import numpy as np
+from cfd_io.dataset import Dataset
 
 # --------------------------------------------------
 # set up logger
@@ -48,6 +48,7 @@ _READER_REGISTRY: dict[str, str] = {
     ".q": "plot3d_flow",
     ".dat": "tecplot",
     ".plt": "tecplot_binary",
+    ".vtu": "vtu",
 }
 
 _WRITER_REGISTRY: dict[str, str] = {
@@ -102,7 +103,7 @@ def read_file(
     *,
     grid_file: str | Path | None = None,
     it: int = 1,
-) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], dict[str, Any]]:
+) -> Dataset:
     """Read a file, dispatching by extension.
 
     Args:
@@ -112,8 +113,7 @@ def read_file(
         it: Timestep index, 1-based (split format only).
 
     Returns:
-        Tuple of ``(grid, flow, attrs)`` -- see format-specific readers
-        for details.
+        `Dataset` containing grid, flow, and metadata.
 
     Raises:
         ValueError: If the file extension is not recognized.
@@ -140,7 +140,7 @@ def read_file(
                 "pass grid_file='...'"
             )
 
-        grid, flow, attrs = read_binary_direct(
+        return read_binary_direct(
             fpath=fpath,
             gpath=grid_file,
             it=it,
@@ -150,36 +150,39 @@ def read_file(
         # lazy import of appropriate reader (deferred until we know it is needed to avoid circular import)
         from cfd_io.readers.hdf5 import read_hdf5
 
-        grid, flow, attrs = read_hdf5(fpath)
+        return read_hdf5(fpath)
 
     elif fmt == "plot3d":
         # lazy import of appropriate reader (deferred until we know it is needed to avoid circular import)
         from cfd_io.readers.plot3d import read_plot3d
 
-        grid, flow, attrs = read_plot3d(fpath)
+        return read_plot3d(fpath)
 
     elif fmt == "plot3d_flow":
         # lazy import of appropriate reader (deferred until we know it is needed to avoid circular import)
         from cfd_io.readers.plot3d_flow import read_plot3d_flow
 
-        grid, flow, attrs = read_plot3d_flow(fpath)
+        return read_plot3d_flow(fpath)
 
     elif fmt == "tecplot":
         # lazy import of appropriate reader (deferred until we know it is needed to avoid circular import)
         from cfd_io.readers.tecplot_ascii import read_tecplot_ascii
 
-        grid, flow, attrs = read_tecplot_ascii(fpath)
+        return read_tecplot_ascii(fpath)
 
     elif fmt == "tecplot_binary":
         # lazy import of appropriate reader (deferred until we know it is needed to avoid circular import)
         from cfd_io.readers.tecplot_binary import read_tecplot_plt
 
-        grid, flow, attrs = read_tecplot_plt(fpath)
+        return read_tecplot_plt(fpath)
+
+    elif fmt == "vtu":
+        from cfd_io.readers.vtu import read_vtu
+
+        return read_vtu(fpath)
 
     else:
         raise ValueError(f"unsupported format: {fmt}")
-
-    return grid, flow, attrs
 
 
 # --------------------------------------------------
@@ -187,9 +190,7 @@ def read_file(
 # --------------------------------------------------
 def write_file(
     fpath: str | Path,
-    grid: dict[str, np.ndarray],
-    flow: dict[str, np.ndarray],
-    attrs: dict[str, Any] | None = None,
+    dataset: Dataset,
     *,
     grid_file: str | Path | None = None,
     dtype: str = "f",
@@ -198,9 +199,7 @@ def write_file(
 
     Args:
         fpath: Output path (flow file for split formats).
-        grid: Grid arrays ``{"x": ndarray, ...}``.
-        flow: Flow arrays ``{"uvel": ndarray, ...}``.
-        attrs: Scalar metadata (stored where the format supports it).
+        dataset: Dataset to write.
         grid_file: Output path for the grid file (required for split
             formats; ignored for HDF5).
         dtype: NumPy dtype for HDF5 datasets (default ``"f"`` = float32).
@@ -234,9 +233,7 @@ def write_file(
         flow_path, _grid_path = write_binary_direct(
             fpath=fpath,
             gpath=grid_file,
-            grid=grid,
-            flow=flow,
-            attrs=attrs,
+            dataset=dataset,
         )
         return flow_path
 
@@ -245,28 +242,28 @@ def write_file(
         # lazy import of appropriate writer
         from cfd_io.writers.hdf5 import write_hdf5
 
-        return write_hdf5(fpath, grid, flow, attrs, dtype=dtype)
+        return write_hdf5(fpath, dataset, dtype=dtype)
 
     elif fmt == "plot3d":
 
         # lazy import of appropriate writer
         from cfd_io.writers.plot3d import write_plot3d
 
-        return write_plot3d(fpath, grid, flow, attrs)
+        return write_plot3d(fpath, dataset)
 
     elif fmt == "tecplot":
 
         # lazy import of appropriate writer
         from cfd_io.writers.tecplot_ascii import write_tecplot_ascii
 
-        return write_tecplot_ascii(fpath, grid, flow, attrs)
+        return write_tecplot_ascii(fpath, dataset)
 
     elif fmt == "tecplot_binary":
 
         # lazy import of appropriate writer
         from cfd_io.writers.tecplot_binary import write_tecplot_plt
 
-        write_tecplot_plt(fpath, grid, flow, attrs)
+        write_tecplot_plt(fpath, dataset)
         return fpath
 
     else:
@@ -307,22 +304,28 @@ def do_convert(
     # debug output for devs
     logger.info("convert: %s -> %s", input_path, output_path)
 
-    # read the source file into the standard (grid, flow, attrs) tuple
-    grid, flow, file_attrs = read_file(
+    output_path = Path(output_path)
+
+    # auto-generate grid filename for split output if not provided
+    if output_grid is None and output_path.suffix.lower() in (".s8", ".s4"):
+        output_grid = output_path.with_name(f"{output_path.stem}_grid{output_path.suffix}")
+        logger.info("convert: auto grid-out -> %s", output_grid)
+
+    # read the source file into a Dataset
+    ds = read_file(
         input_path,
         grid_file=input_grid,
         it=it,
     )
 
     # merge: file attrs as base, caller overrides on top
-    merged_attrs = {**file_attrs, **(attrs or {})}
+    if attrs:
+        ds.attrs = {**ds.attrs, **attrs}
 
     # write the data to the destination file
     result = write_file(
         output_path,
-        grid,
-        flow,
-        merged_attrs,
+        ds,
         grid_file=output_grid,
         dtype=dtype,
     )

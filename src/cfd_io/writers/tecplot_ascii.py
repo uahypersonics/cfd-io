@@ -20,9 +20,10 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
 
 import numpy as np
+
+from cfd_io.dataset import Dataset, StructuredGrid
 
 # --------------------------------------------------
 # set up logger
@@ -37,22 +38,16 @@ logger = logging.getLogger(__name__)
 # write grid and optional flow to a Tecplot ASCII .dat file
 def write_tecplot_ascii(
     fpath: str | Path,
-    grid: dict[str, np.ndarray],
-    flow: dict[str, np.ndarray] | None = None,
-    attrs: dict[str, Any] | None = None,
+    dataset: Dataset,
     *,
     title: str = "cfd-io",
     zone_title: str = "Zone 1",
 ) -> Path:
-    """Write grid (and optional flow) to a Tecplot ASCII ``.dat`` file.
+    """Write a `Dataset` to a Tecplot ASCII ``.dat`` file.
 
     Args:
         fpath: Output file path.
-        grid: Grid arrays ``{"x": (ni, nj, nk), "y": ..., "z": ...}``.
-        flow: Flow arrays ``{"uvel": (ni, nj, nk), ...}``.
-            ``None`` or ``{}`` for grid-only output.
-        attrs: Optional metadata.  If ``"title"`` is present it
-            overrides the *title* argument.
+        dataset: Dataset to write.
         title: Tecplot TITLE string.
         zone_title: Tecplot ZONE T string.
 
@@ -61,19 +56,19 @@ def write_tecplot_ascii(
 
     Raises:
         ValueError: If grid is empty or missing ``"x"`` / ``"y"``.
+        TypeError: If the grid is not a `StructuredGrid`.
     """
     # convert to Path object
     fpath = Path(fpath)
 
-    # validate inputs
-    if not grid:
-        raise ValueError("grid dict must not be empty")
-    if "x" not in grid or "y" not in grid:
-        raise ValueError("grid must contain at least 'x' and 'y'")
+    # validate grid type
+    if not isinstance(dataset.grid, StructuredGrid):
+        raise TypeError("write_tecplot_ascii requires a StructuredGrid")
 
-    # default empty dicts for optional arguments
-    safe_flow = flow or {}
-    safe_attrs = attrs or {}
+    # unpack Dataset into local dicts for writing
+    grid = {"x": dataset.grid.x, "y": dataset.grid.y, "z": dataset.grid.z}
+    safe_flow = {k: v.data for k, v in dataset.flow.items()}
+    safe_attrs = dataset.attrs or {}
 
     # allow title override from attrs metadata
     if "title" in safe_attrs:

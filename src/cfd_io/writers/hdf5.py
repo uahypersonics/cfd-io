@@ -21,10 +21,11 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
 
 import h5py
 import numpy as np
+
+from cfd_io.dataset import Dataset, StructuredGrid
 
 # --------------------------------------------------
 # set up logger
@@ -39,42 +40,30 @@ logger = logging.getLogger(__name__)
 # write grid and flow dicts to a grouped HDF5 file
 def write_hdf5(
     fpath: str | Path,
-    grid: dict[str, np.ndarray],
-    flow: dict[str, np.ndarray] | dict[int, dict[str, np.ndarray]],
-    attrs: dict[str, Any] | None = None,
+    dataset: Dataset,
     *,
     dtype: str = "f",
 ) -> Path:
-    """Write grid and flow dicts to a grouped HDF5 file.
-
-    The ``flow`` argument accepts two forms:
-
-    1. **Single timestep** -- ``{"uvel": ndarray, ...}``
-       Stored under ``/flow/00001/``.
-    2. **Multi-timestep** -- ``{1: {"uvel": ndarray}, 2: {...}, ...}``
-       Each integer key becomes a zero-padded sub-group name.
+    """Write a `Dataset` to a grouped HDF5 file.
 
     Args:
         fpath: Output file path.
-        grid: Grid arrays ``{"x": ndarray, "y": ndarray, ...}``.
-        flow: Flow arrays, either single-timestep dict or
-            ``{timestep_int: dict_of_arrays}`` for multiple timesteps.
-        attrs: Scalar metadata stored as root-level HDF5 attributes.
-            ``None`` values are silently skipped.  Two special keys
-            are recognised inside per-timestep dicts when *flow* is
-            multi-timestep:
-
-            - ``"_iteration"`` -- stored as the timestep-group attr
-              ``iteration``
-            - ``"_solution_time"`` -- stored as the timestep-group attr
-              ``solution_time``
-
+        dataset: Dataset to write.  Flow is stored as a single
+            timestep under ``/flow/00001/``.
         dtype: NumPy dtype string for all datasets (default ``"f"`` = float32).
 
     Returns:
         Path to the created file.
     """
     fpath = Path(fpath)
+
+    if not isinstance(dataset.grid, StructuredGrid):
+        raise TypeError("write_hdf5 requires a StructuredGrid")
+
+    # unpack Dataset into dicts for writing
+    grid = {"x": dataset.grid.x, "y": dataset.grid.y, "z": dataset.grid.z}
+    flow: dict[str, np.ndarray] = {k: v.data for k, v in dataset.flow.items()}
+    attrs = dataset.attrs or {}
 
     # normalise flow into {int: dict} form for uniform processing
     timestep_flow = _normalise_flow(flow)

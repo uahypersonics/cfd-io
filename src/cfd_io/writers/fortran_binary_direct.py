@@ -13,9 +13,10 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
 
 import numpy as np
+
+from cfd_io.dataset import Dataset, StructuredGrid
 
 # --------------------------------------------------
 # set up logger
@@ -84,8 +85,11 @@ def _write_header(
         # info lines section
         fobj.write(" \n")
         fobj.write(f"     Information about file :   ({len(info_lines):3d}  info lines )\n")
-        for line in info_lines:
-            fobj.write(f"   {line}\n")
+        if info_lines:
+            for line in info_lines:
+                fobj.write(f"   {line}\n")
+        else:
+            fobj.write(" \n")
 
         # variable names section
         fobj.write("     Information about parameters :\n")
@@ -146,11 +150,9 @@ def _write_binary(
 def write_binary_direct(
     fpath: str | Path,
     gpath: str | Path,
-    grid: dict[str, np.ndarray] | None = None,
-    flow: dict[str, np.ndarray] | None = None,
-    attrs: dict[str, Any] | None = None,
+    dataset: Dataset,
 ) -> tuple[Path, Path]:
-    """Write grid and flow dicts to binary files with corresponding header files.
+    """Write a `Dataset` to binary files with corresponding header files.
 
     Up to four files are created (grid-only or flow-only is allowed):
 
@@ -162,28 +164,32 @@ def write_binary_direct(
     Args:
         fpath: Path for the flow binary file.
         gpath: Path for the grid binary file.
-        grid: Grid arrays ``{"x": ndarray, "y": ndarray, ...}``,
-            each ``(nx, ny, nz)``.
-        flow: Flow arrays ``{"uvel": ndarray, ...}``,
-            each ``(nx, ny, nz)``.
-        attrs: Optional metadata.  Recognized keys:
-
-            - ``"info_lines"``: list of strings for the header info section
-            - ``"timesteps"``: list of integer timestep indices
-
-            Other keys are ignored (no metadata container).
+        dataset: Dataset to write.
 
     Returns:
         Tuple of ``(fpath, gpath)`` for the two binary files.
 
     Raises:
-        ValueError: If grid or flow dicts are empty, or array shapes
+        TypeError: If the grid is not a `StructuredGrid`.
+        ValueError: If grid and flow are both empty, or array shapes
             are inconsistent.
     """
 
     # convert to Path objects
     fpath = Path(fpath)
     gpath = Path(gpath)
+
+    if not isinstance(dataset.grid, StructuredGrid):
+        raise TypeError("write_binary_direct requires a StructuredGrid")
+
+    # unpack Dataset into dicts
+    grid: dict[str, np.ndarray] | None = {
+        "x": dataset.grid.x, "y": dataset.grid.y, "z": dataset.grid.z,
+    }
+    flow: dict[str, np.ndarray] | None = {
+        k: v.data for k, v in dataset.flow.items()
+    } or None
+    attrs = dataset.attrs or {}
 
     # validate that at least one dict is non-empty
     if not grid and not flow:
@@ -236,9 +242,6 @@ def write_binary_direct(
             )
 
     # extract metadata (if it exists)
-
-    # first make sure attrs is a dict (empty dict if None)
-    attrs = attrs or {}
 
     # get info lines from attrs; default to empty list if not present
     info_lines = attrs.get("info_lines", [])

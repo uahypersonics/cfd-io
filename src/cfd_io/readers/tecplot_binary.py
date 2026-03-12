@@ -23,6 +23,7 @@ from typing import Any
 
 import numpy as np
 
+from cfd_io.dataset import Dataset, Field, StructuredGrid
 from cfd_io.readers._aliases import GRID_NAMES, normalize
 
 # --------------------------------------------------
@@ -54,7 +55,7 @@ def _require_pytecplot() -> None:
 # read a Tecplot binary .plt file via pytecplot
 def read_tecplot_plt(
     fpath: str | Path,
-) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], dict[str, Any]]:
+) -> Dataset:
     """Read a Tecplot binary ``.plt`` file.
 
     Requires ``pytecplot`` (optional dependency).  Only the first zone
@@ -135,4 +136,8 @@ def read_tecplot_plt(
         len(grid), len(flow), fpath,
     )
 
-    return grid, flow, attrs
+    return Dataset(
+        grid=StructuredGrid(grid["x"], grid["y"], grid.get("z", np.zeros_like(grid["x"]))),
+        flow={k: Field(v) for k, v in flow.items()},
+        attrs=attrs,
+    )

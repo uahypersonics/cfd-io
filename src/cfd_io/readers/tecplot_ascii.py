@@ -25,6 +25,7 @@ from typing import Any
 
 import numpy as np
 
+from cfd_io.dataset import Dataset, Field, StructuredGrid
 from cfd_io.readers._aliases import GRID_NAMES, normalize
 
 # --------------------------------------------------
@@ -38,18 +39,14 @@ logger = logging.getLogger(__name__)
 # --------------------------------------------------
 def read_tecplot_ascii(
     fpath: str | Path,
-) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], dict[str, Any]]:
+) -> Dataset:
     """Read a Tecplot ASCII ``.dat`` file.
 
     Args:
         fpath: Path to the ``.dat`` file.
 
     Returns:
-        Tuple of ``(grid, flow, attrs)`` where:
-
-        - **grid** -- ``{"x": (ni, nj, nk), "y": ..., ...}``
-        - **flow** -- ``{"uvel": (ni, nj, nk), ...}``
-        - **attrs** -- ``{"title": str}`` if a title was present
+        `Dataset` with a `StructuredGrid`.
 
     Raises:
         FileNotFoundError: If *fpath* does not exist.
@@ -137,8 +134,11 @@ def read_tecplot_ascii(
         len(grid), len(flow), fpath,
     )
 
-    # return grid, flow, and any attributes (e.g. title) as a tuple
-    return grid, flow, attrs
+    return Dataset(
+        grid=StructuredGrid(grid["x"], grid["y"], grid.get("z", np.zeros_like(grid["x"]))),
+        flow={k: Field(v) for k, v in flow.items()},
+        attrs=attrs,
+    )
 
 
 # --------------------------------------------------

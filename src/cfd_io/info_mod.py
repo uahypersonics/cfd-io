@@ -52,37 +52,39 @@ def get_info(fpath: str | Path) -> FileInfo:
         ValueError: If the file extension is not recognized.
         FileNotFoundError: If a required companion file is missing.
     """
+
+    # ensure we have a Path object and get the suffix
     fpath = Path(fpath)
     suffix = fpath.suffix.lower()
 
-    # -- .cd companion header ------------------------------------------
+    # .cd companion header files for split binary formats
     if suffix == ".cd":
-        return _info_from_cd(fpath)
+        return _info_from_header(fpath)
 
-    # -- .s8 / .s4 binary (resolve companion .cd automatically) --------
+    # .s8 / .s4 binary (resolve companion .cd automatically)
     elif suffix in (".s8", ".s4"):
-        cd_path = fpath.with_suffix(".cd")
-        if not cd_path.exists():
+        fpath = fpath.with_suffix(".cd")
+        if not fpath.exists():
             raise FileNotFoundError(f"no companion .cd file found for {fpath}")
-        return _info_from_cd(cd_path)
+        return _info_from_header(fpath)
 
-    # -- HDF5 ----------------------------------------------------------
+    # HDF5
     elif suffix in (".h5", ".hdf5"):
         return _info_from_hdf5(fpath)
 
-    # -- Plot3D grid ---------------------------------------------------
+    # Plot3D grid
     elif suffix in (".x", ".xyz"):
         return _info_from_plot3d_grid(fpath)
 
-    # -- Plot3D solution -----------------------------------------------
+    # Plot3D solution
     elif suffix == ".q":
         return _info_from_plot3d_flow(fpath)
 
-    # -- Tecplot ASCII -------------------------------------------------
+    # Tecplot ASCII
     elif suffix == ".dat":
         return _info_from_tecplot_ascii(fpath)
 
-    # -- Tecplot binary ------------------------------------------------
+    # Tecplot binary
     elif suffix == ".plt":
         return _info_from_tecplot_binary(fpath)
 
@@ -91,10 +93,9 @@ def get_info(fpath: str | Path) -> FileInfo:
 
 
 # --------------------------------------------------
-# format-specific helpers
+# read header file for split binary formats (direct access)
 # --------------------------------------------------
-
-def _info_from_cd(cd_path: Path) -> FileInfo:
+def _info_from_header(cd_path: Path) -> FileInfo:
     """Extract info from a .cd companion header."""
     from cfd_io.readers.fortran_binary_direct import read_header
 
@@ -112,6 +113,9 @@ def _info_from_cd(cd_path: Path) -> FileInfo:
     )
 
 
+# --------------------------------------------------
+# get info from hdf5 files without loading arrays
+# --------------------------------------------------
 def _info_from_hdf5(fpath: Path) -> FileInfo:
     """Extract info from an HDF5 file without loading arrays."""
     import h5py
@@ -174,6 +178,9 @@ def _info_from_hdf5(fpath: Path) -> FileInfo:
         )
 
 
+# --------------------------------------------------
+# get info from plot 3d grid data
+# --------------------------------------------------
 def _info_from_plot3d_grid(fpath: Path) -> FileInfo:
     """Extract info from a Plot3D grid file without loading coordinates."""
     from cfd_io.readers.plot3d import read_plot3d
@@ -193,6 +200,9 @@ def _info_from_plot3d_grid(fpath: Path) -> FileInfo:
     )
 
 
+# --------------------------------------------------
+# get info from plot3d solution data
+# --------------------------------------------------
 def _info_from_plot3d_flow(fpath: Path) -> FileInfo:
     """Extract info from a Plot3D .q solution file."""
     from cfd_io.readers.plot3d_flow import read_plot3d_flow
@@ -219,6 +229,9 @@ def _info_from_plot3d_flow(fpath: Path) -> FileInfo:
     )
 
 
+# --------------------------------------------------
+# get info from tecplot ascii files
+# --------------------------------------------------
 def _info_from_tecplot_ascii(fpath: Path) -> FileInfo:
     """Extract info from a Tecplot ASCII file."""
     from cfd_io.readers.tecplot_ascii import read_tecplot_ascii
@@ -239,6 +252,9 @@ def _info_from_tecplot_ascii(fpath: Path) -> FileInfo:
     )
 
 
+# --------------------------------------------------
+# get info from tecplot binary files (requires pytecplot)
+# --------------------------------------------------
 def _info_from_tecplot_binary(fpath: Path) -> FileInfo:
     """Extract info from a Tecplot binary file."""
     from cfd_io.readers.tecplot_binary import read_tecplot_plt

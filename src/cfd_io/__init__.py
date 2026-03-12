@@ -5,6 +5,7 @@ from importlib.metadata import version
 __version__ = version("cfd-io")
 
 from cfd_io.convert_mod import do_convert, read_file, write_file
+from cfd_io.dataset import Dataset, Field, Grid, StructuredGrid, UnstructuredGrid
 from cfd_io.info_mod import FileInfo, get_info
 from cfd_io.readers.fortran_binary_direct import (
     BinaryHeader,
@@ -23,6 +24,7 @@ from cfd_io.readers.plot3d_flow_binary import read_plot3d_flow_binary
 from cfd_io.readers.plot3d_grid_ascii import read_plot3d_grid_ascii
 from cfd_io.readers.plot3d_grid_binary import read_plot3d_grid_binary
 from cfd_io.readers.tecplot_ascii import read_tecplot_ascii
+from cfd_io.readers.vtu import read_vtu
 from cfd_io.writers.fortran_binary_sequential import FortranBinaryWriter
 from cfd_io.writers.hdf5 import write_hdf5
 
@@ -40,9 +42,14 @@ from cfd_io.writers.tecplot_ascii import write_tecplot_ascii
 
 __all__ = [
     "BinaryHeader",
+    "Dataset",
+    "Field",
     "FileInfo",
     "FortranBinaryReader",
     "FortranBinaryWriter",
+    "Grid",
+    "StructuredGrid",
+    "UnstructuredGrid",
     "do_convert",
     "get_info",
     "read_binary_direct",
@@ -59,6 +66,7 @@ __all__ = [
     "read_plot3d_grid_ascii",
     "read_plot3d_grid_binary",
     "read_tecplot_ascii",
+    "read_vtu",
     "write_binary_direct",
     "write_file",
     "write_hdf5",
