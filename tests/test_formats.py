@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from cfd_io.convert_mod import do_convert, read_file
+from cfd_io.dataset import Dataset, Field, StructuredGrid
 from cfd_io.readers.fortran_binary_direct import read_binary_direct
 from cfd_io.readers.plot3d import read_plot3d
 from cfd_io.readers.plot3d_flow import read_plot3d_flow
@@ -34,6 +35,18 @@ FLOW = {
 }
 
 
+def _ds(grid, flow=None, attrs=None):
+    """Build a Dataset from plain dicts (test helper)."""
+    x = grid["x"]
+    y = grid["y"]
+    z = grid.get("z", np.zeros_like(x))
+    return Dataset(
+        grid=StructuredGrid(x, y, z),
+        flow={k: Field(v) for k, v in (flow or {}).items()},
+        attrs=attrs or {},
+    )
+
+
 # ======================================================================
 # Plot3D tests
 # ======================================================================
@@ -41,47 +54,43 @@ FLOW = {
 def test_plot3d_binary_3d_roundtrip(tmp_path: Path) -> None:
     """3-D Plot3D binary round-trip."""
     p = tmp_path / "grid.x"
-    write_plot3d(p, GRID_3D, binary=True)
-    g, f, _a = read_plot3d(p)
+    write_plot3d(p, _ds(GRID_3D), binary=True)
+    ds = read_plot3d(p)
 
-    assert "x" in g and "y" in g and "z" in g
-    assert f == {}
-    assert np.allclose(g["x"], GRID_3D["x"])
-    assert np.allclose(g["y"], GRID_3D["y"])
-    assert np.allclose(g["z"], GRID_3D["z"])
+    assert np.allclose(ds.grid.x, GRID_3D["x"])
+    assert np.allclose(ds.grid.y, GRID_3D["y"])
+    assert np.allclose(ds.grid.z, GRID_3D["z"])
+    assert len(ds.flow) == 0
 
 
 def test_plot3d_ascii_3d_roundtrip(tmp_path: Path) -> None:
     """3-D Plot3D ASCII round-trip."""
     p = tmp_path / "grid.x"
-    write_plot3d(p, GRID_3D, binary=False)
-    g, _f, _a = read_plot3d(p)
+    write_plot3d(p, _ds(GRID_3D), binary=False)
+    ds = read_plot3d(p)
 
-    assert "z" in g
-    assert np.allclose(g["x"], GRID_3D["x"], atol=1e-10)
-    assert np.allclose(g["z"], GRID_3D["z"], atol=1e-10)
+    assert np.allclose(ds.grid.x, GRID_3D["x"], atol=1e-10)
+    assert np.allclose(ds.grid.z, GRID_3D["z"], atol=1e-10)
 
 
 def test_plot3d_binary_2d_roundtrip(tmp_path: Path) -> None:
     """2-D Plot3D binary round-trip (no z coordinate)."""
     p = tmp_path / "grid.x"
-    write_plot3d(p, GRID_2D, binary=True)
-    g, _, _ = read_plot3d(p)
+    write_plot3d(p, _ds(GRID_2D), binary=True)
+    ds = read_plot3d(p)
 
-    assert "x" in g and "y" in g
-    assert "z" not in g
-    assert np.allclose(g["x"], GRID_2D["x"])
+    assert np.allclose(ds.grid.x, GRID_2D["x"])
+    assert ds.grid.ndim == 2
 
 
 def test_plot3d_ascii_2d_roundtrip(tmp_path: Path) -> None:
     """2-D Plot3D ASCII round-trip."""
     p = tmp_path / "grid.x"
-    write_plot3d(p, GRID_2D, binary=False)
-    g, _, _ = read_plot3d(p)
+    write_plot3d(p, _ds(GRID_2D), binary=False)
+    ds = read_plot3d(p)
 
-    assert "x" in g and "y" in g
-    assert "z" not in g
-    assert np.allclose(g["x"], GRID_2D["x"], atol=1e-10)
+    assert np.allclose(ds.grid.x, GRID_2D["x"], atol=1e-10)
+    assert ds.grid.ndim == 2
 
 
 # ======================================================================
@@ -91,35 +100,32 @@ def test_plot3d_ascii_2d_roundtrip(tmp_path: Path) -> None:
 def test_tecplot_ascii_point_3d_roundtrip(tmp_path: Path) -> None:
     """3-D Tecplot ASCII POINT-format round-trip."""
     p = tmp_path / "data.dat"
-    write_tecplot_ascii(p, GRID_3D, FLOW, title="test3d")
-    g, f, a = read_tecplot_ascii(p)
+    write_tecplot_ascii(p, _ds(GRID_3D, FLOW), title="test3d")
+    ds = read_tecplot_ascii(p)
 
-    assert "x" in g and "y" in g and "z" in g
-    assert "uvel" in f and "pres" in f
-    assert a.get("title") == "test3d"
-    assert np.allclose(g["x"], GRID_3D["x"], atol=1e-6)
-    assert np.allclose(f["uvel"], FLOW["uvel"], atol=1e-6)
+    assert np.allclose(ds.grid.x, GRID_3D["x"], atol=1e-6)
+    assert "uvel" in ds.flow and "pres" in ds.flow
+    assert ds.attrs.get("title") == "test3d"
+    assert np.allclose(ds.flow["uvel"].data, FLOW["uvel"], atol=1e-6)
 
 
 def test_tecplot_ascii_2d_roundtrip(tmp_path: Path) -> None:
     """2-D Tecplot ASCII round-trip (no z, no flow)."""
     p = tmp_path / "grid.dat"
-    write_tecplot_ascii(p, GRID_2D)
-    g, f, _ = read_tecplot_ascii(p)
+    write_tecplot_ascii(p, _ds(GRID_2D))
+    ds = read_tecplot_ascii(p)
 
-    assert "x" in g and "y" in g
-    assert len(f) == 0
-    assert np.allclose(g["x"], GRID_2D["x"], atol=1e-6)
+    assert len(ds.flow) == 0
+    assert np.allclose(ds.grid.x, GRID_2D["x"], atol=1e-6)
 
 
 def test_tecplot_ascii_grid_only(tmp_path: Path) -> None:
     """3-D Tecplot ASCII with grid only (no flow variables)."""
     p = tmp_path / "grid.dat"
-    write_tecplot_ascii(p, GRID_3D)
-    g, f, _ = read_tecplot_ascii(p)
+    write_tecplot_ascii(p, _ds(GRID_3D))
+    ds = read_tecplot_ascii(p)
 
-    assert "x" in g and "y" in g and "z" in g
-    assert len(f) == 0
+    assert len(ds.flow) == 0
 
 
 # ======================================================================
@@ -130,7 +136,7 @@ def test_binary_direct_grid_only(tmp_path: Path) -> None:
     """Binary-direct writer with grid only (no flow dict)."""
     flow_out = tmp_path / "flow.s8"
     grid_out = tmp_path / "grid.s8"
-    write_binary_direct(flow_out, grid_out, GRID_3D, {})
+    write_binary_direct(flow_out, grid_out, _ds(GRID_3D))
 
     # flow binary should NOT exist
     assert not flow_out.exists()
@@ -146,21 +152,20 @@ def test_binary_direct_grid_only(tmp_path: Path) -> None:
 def test_convert_plot3d_to_hdf5(tmp_path: Path) -> None:
     """Plot3D -> HDF5 via convert()."""
     p3d = tmp_path / "grid.x"
-    write_plot3d(p3d, GRID_3D, binary=True)
+    write_plot3d(p3d, _ds(GRID_3D), binary=True)
 
     h5 = tmp_path / "grid.h5"
     do_convert(p3d, h5)
 
     from cfd_io.readers.hdf5 import read_hdf5
-    g, _f, _ = read_hdf5(h5)
-    assert "x" in g
-    # flow should be empty or minimal (grid-only source)
+    ds = read_hdf5(h5)
+    assert ds.grid.x is not None
 
 
 def test_convert_plot3d_to_split(tmp_path: Path) -> None:
     """Plot3D -> split binary grid-only via convert()."""
     p3d = tmp_path / "grid.x"
-    write_plot3d(p3d, GRID_3D, binary=True)
+    write_plot3d(p3d, _ds(GRID_3D), binary=True)
 
     flow_out = tmp_path / "grid_flow.s8"
     grid_out = tmp_path / "grid_out.s8"
@@ -174,27 +179,27 @@ def test_convert_split_to_plot3d(tmp_path: Path) -> None:
     """Split binary grid-only -> Plot3D via convert()."""
     grid_out = tmp_path / "grid.s8"
     flow_out = tmp_path / "flow.s8"
-    write_binary_direct(flow_out, grid_out, GRID_3D, {})
+    write_binary_direct(flow_out, grid_out, _ds(GRID_3D))
 
     p3d = tmp_path / "grid.x"
     do_convert(grid_out, p3d, input_grid=grid_out)
 
-    g, _, _ = read_plot3d(p3d)
-    assert "x" in g
+    ds = read_plot3d(p3d)
+    assert ds.grid.x is not None
 
 
 def test_convert_tecplot_to_hdf5(tmp_path: Path) -> None:
     """Tecplot ASCII -> HDF5 via convert()."""
     dat = tmp_path / "data.dat"
-    write_tecplot_ascii(dat, GRID_3D, FLOW)
+    write_tecplot_ascii(dat, _ds(GRID_3D, FLOW))
 
     h5 = tmp_path / "data.h5"
     do_convert(dat, h5)
 
     from cfd_io.readers.hdf5 import read_hdf5
-    g, f, _ = read_hdf5(h5)
-    assert "x" in g
-    assert "uvel" in f
+    ds = read_hdf5(h5)
+    assert ds.grid.x is not None
+    assert "uvel" in ds.flow
 
 
 def test_convert_hdf5_to_tecplot(tmp_path: Path) -> None:
@@ -202,28 +207,28 @@ def test_convert_hdf5_to_tecplot(tmp_path: Path) -> None:
     from cfd_io.writers.hdf5 import write_hdf5
 
     h5 = tmp_path / "test.h5"
-    write_hdf5(h5, GRID_3D, FLOW)
+    write_hdf5(h5, _ds(GRID_3D, FLOW))
 
     dat = tmp_path / "out.dat"
     do_convert(h5, dat)
 
-    g, f, _ = read_tecplot_ascii(dat)
-    assert "x" in g
-    assert "uvel" in f
+    ds = read_tecplot_ascii(dat)
+    assert ds.grid.x is not None
+    assert "uvel" in ds.flow
 
 
 def test_convert_tecplot_to_split(tmp_path: Path) -> None:
     """Tecplot ASCII -> split binary via convert()."""
     dat = tmp_path / "data.dat"
-    write_tecplot_ascii(dat, GRID_3D, FLOW)
+    write_tecplot_ascii(dat, _ds(GRID_3D, FLOW))
 
     flow_out = tmp_path / "flow.s8"
     grid_out = tmp_path / "grid.s8"
     do_convert(dat, flow_out, output_grid=grid_out)
 
-    g, f, _ = read_binary_direct(flow_out, grid_out)
-    assert "x" in g
-    assert "uvel" in f
+    ds = read_binary_direct(flow_out, grid_out)
+    assert ds.grid.x is not None
+    assert "uvel" in ds.flow
 
 
 # ======================================================================
@@ -359,30 +364,27 @@ def test_plot3d_flow_dispatcher_binary(tmp_path: Path) -> None:
     """Dispatcher auto-detects binary .q file."""
     p = tmp_path / "flow.q"
     _write_q_binary_3d(p)
-    g, f, a = read_plot3d_flow(p)
+    ds = read_plot3d_flow(p)
 
-    assert g == {}
-    assert "dens" in f
-    assert a["mach"] == _MACH
+    assert "dens" in ds.flow
+    assert ds.attrs["mach"] == _MACH
 
 
 def test_plot3d_flow_dispatcher_ascii(tmp_path: Path) -> None:
     """Dispatcher auto-detects ASCII .q file."""
     p = tmp_path / "flow.q"
     _write_q_ascii_3d(p)
-    g, f, a = read_plot3d_flow(p)
+    ds = read_plot3d_flow(p)
 
-    assert g == {}
-    assert "dens" in f
-    assert a["mach"] == _MACH
+    assert "dens" in ds.flow
+    assert ds.attrs["mach"] == _MACH
 
 
 def test_read_file_q_extension(tmp_path: Path) -> None:
     """read_file dispatches .q files to plot3d_flow reader."""
     p = tmp_path / "flow.q"
     _write_q_ascii_3d(p)
-    g, f, a = read_file(p)
+    ds = read_file(p)
 
-    assert g == {}
-    assert "dens" in f and "energy" in f
-    assert a["mach"] == _MACH
+    assert "dens" in ds.flow and "energy" in ds.flow
+    assert ds.attrs["mach"] == _MACH

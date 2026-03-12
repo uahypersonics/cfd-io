@@ -186,16 +186,15 @@ def _info_from_plot3d_grid(fpath: Path) -> FileInfo:
     from cfd_io.readers.plot3d import read_plot3d
 
     # read_plot3d is lightweight for grid-only; gets dims from header records
-    grid, _, _ = read_plot3d(fpath)
-    first = next(iter(grid.values()))
-    nx, ny, nz = first.shape
+    ds = read_plot3d(fpath)
+    nx, ny, nz = ds.grid.shape
     return FileInfo(
         nx=nx,
         ny=ny,
         nz=nz,
         np=0,
         nt=0,
-        precision=str(first.dtype),
+        precision=str(ds.grid.x.dtype),
         format="plot3d",
     )
 
@@ -207,10 +206,10 @@ def _info_from_plot3d_flow(fpath: Path) -> FileInfo:
     """Extract info from a Plot3D .q solution file."""
     from cfd_io.readers.plot3d_flow import read_plot3d_flow
 
-    _, flow, _ = read_plot3d_flow(fpath)
-    var_names = list(flow.keys())
+    ds = read_plot3d_flow(fpath)
+    var_names = list(ds.flow.keys())
     if var_names:
-        first = flow[var_names[0]]
+        first = ds.flow[var_names[0]].data
         nx, ny, nz = first.shape
         precision = str(first.dtype)
     else:
@@ -236,10 +235,9 @@ def _info_from_tecplot_ascii(fpath: Path) -> FileInfo:
     """Extract info from a Tecplot ASCII file."""
     from cfd_io.readers.tecplot_ascii import read_tecplot_ascii
 
-    grid, flow, _ = read_tecplot_ascii(fpath)
-    var_names = list(flow.keys())
-    first = next(iter(grid.values()))
-    nx, ny, nz = first.shape
+    ds = read_tecplot_ascii(fpath)
+    var_names = list(ds.flow.keys())
+    nx, ny, nz = ds.grid.shape
     return FileInfo(
         nx=nx,
         ny=ny,
@@ -247,7 +245,7 @@ def _info_from_tecplot_ascii(fpath: Path) -> FileInfo:
         np=len(var_names),
         nt=1 if var_names else 0,
         var_names=var_names,
-        precision=str(first.dtype),
+        precision=str(ds.grid.x.dtype),
         format="tecplot",
     )
 
@@ -259,10 +257,9 @@ def _info_from_tecplot_binary(fpath: Path) -> FileInfo:
     """Extract info from a Tecplot binary file."""
     from cfd_io.readers.tecplot_binary import read_tecplot_plt
 
-    grid, flow, _ = read_tecplot_plt(fpath)
-    var_names = list(flow.keys())
-    first = next(iter(grid.values()))
-    nx, ny, nz = first.shape
+    ds = read_tecplot_plt(fpath)
+    var_names = list(ds.flow.keys())
+    nx, ny, nz = ds.grid.shape
     return FileInfo(
         nx=nx,
         ny=ny,
@@ -270,6 +267,6 @@ def _info_from_tecplot_binary(fpath: Path) -> FileInfo:
         np=len(var_names),
         nt=1 if var_names else 0,
         var_names=var_names,
-        precision=str(first.dtype),
+        precision=str(ds.grid.x.dtype),
         format="tecplot_binary",
     )

@@ -6,12 +6,25 @@ import numpy as np
 import pytest
 
 from cfd_io.convert_mod import do_convert, read_file, write_file
+from cfd_io.dataset import Dataset, Field, StructuredGrid
 
 # -- shared test data --------------------------------------------------
 NX, NY, NZ = 4, 3, 2
 np.random.seed(33)
 GRID = {"x": np.random.rand(NX, NY, NZ), "y": np.random.rand(NX, NY, NZ)}
 FLOW = {"uvel": np.random.rand(NX, NY, NZ)}
+
+
+def _ds(grid, flow=None, attrs=None):
+    """Build a Dataset from plain dicts (test helper)."""
+    x = grid["x"]
+    y = grid["y"]
+    z = grid.get("z", np.zeros_like(x))
+    return Dataset(
+        grid=StructuredGrid(x, y, z),
+        flow={k: Field(v) for k, v in (flow or {}).items()},
+        attrs=attrs or {},
+    )
 
 
 # ======================================================================
@@ -32,7 +45,7 @@ def test_read_split_missing_grid_file(tmp_path: Path) -> None:
 
     fpath = tmp_path / "flow.s8"
     gpath = tmp_path / "grid.s8"
-    write_binary_direct(fpath, gpath, GRID, FLOW)
+    write_binary_direct(fpath, gpath, _ds(GRID, FLOW))
 
     with pytest.raises(ValueError, match="grid file"):
         read_file(fpath)  # no grid_file kwarg
@@ -46,14 +59,14 @@ def test_write_unsupported_extension(tmp_path: Path) -> None:
     """write_file raises ValueError for unrecognized extension."""
     bad = tmp_path / "out.csv"
     with pytest.raises(ValueError, match="no writer"):
-        write_file(bad, GRID, FLOW)
+        write_file(bad, _ds(GRID, FLOW))
 
 
 def test_write_split_missing_grid_file(tmp_path: Path) -> None:
     """write_file raises ValueError when split format has no grid_file."""
     out = tmp_path / "flow.s8"
     with pytest.raises(ValueError, match="grid file"):
-        write_file(out, GRID, FLOW)  # no grid_file kwarg
+        write_file(out, _ds(GRID, FLOW))  # no grid_file kwarg
 
 
 # ======================================================================
@@ -74,7 +87,7 @@ def test_convert_bad_output_extension(tmp_path: Path) -> None:
     from cfd_io.writers.hdf5 import write_hdf5
 
     h5 = tmp_path / "data.h5"
-    write_hdf5(h5, GRID, FLOW)
+    write_hdf5(h5, _ds(GRID, FLOW))
     bad_out = tmp_path / "out.csv"
     with pytest.raises(ValueError, match="no writer"):
         do_convert(h5, bad_out)
@@ -89,15 +102,15 @@ def test_read_file_accepts_string_path(tmp_path: Path) -> None:
     from cfd_io.writers.hdf5 import write_hdf5
 
     h5 = tmp_path / "data.h5"
-    write_hdf5(h5, GRID, FLOW)
+    write_hdf5(h5, _ds(GRID, FLOW))
 
-    grid, flow, _attrs = read_file(str(h5))  # string, not Path
-    assert "x" in grid
-    assert "uvel" in flow
+    ds = read_file(str(h5))  # string, not Path
+    assert ds.grid.x is not None
+    assert "uvel" in ds.flow
 
 
 def test_write_file_accepts_string_path(tmp_path: Path) -> None:
     """write_file accepts a string path (coerced to Path internally)."""
     out = tmp_path / "out.h5"
-    result = write_file(str(out), GRID, FLOW)
+    result = write_file(str(out), _ds(GRID, FLOW))
     assert Path(result).exists()

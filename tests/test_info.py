@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from cfd_io.dataset import Dataset, Field, StructuredGrid
 from cfd_io.info_mod import get_info
 from cfd_io.writers.fortran_binary_direct import write_binary_direct
 from cfd_io.writers.hdf5 import write_hdf5
@@ -32,6 +33,18 @@ FLOW = {
 }
 
 
+def _ds(grid, flow=None, attrs=None):
+    """Build a Dataset from plain dicts (test helper)."""
+    x = grid["x"]
+    y = grid["y"]
+    z = grid.get("z", np.zeros_like(x))
+    return Dataset(
+        grid=StructuredGrid(x, y, z),
+        flow={k: Field(v) for k, v in (flow or {}).items()},
+        attrs=attrs or {},
+    )
+
+
 # ======================================================================
 # split format (.cd / .s8 / .s4)
 # ======================================================================
@@ -40,7 +53,7 @@ def test_info_cd(tmp_path: Path) -> None:
     """get_info on a .cd file returns split metadata."""
     fpath = tmp_path / "flow.s8"
     gpath = tmp_path / "grid.s8"
-    write_binary_direct(fpath, gpath, GRID, FLOW)
+    write_binary_direct(fpath, gpath, _ds(GRID, FLOW))
 
     info = get_info(fpath.with_suffix(".cd"))
     assert info.format == "split"
@@ -56,7 +69,7 @@ def test_info_s8(tmp_path: Path) -> None:
     """get_info on a .s8 file auto-resolves the .cd companion."""
     fpath = tmp_path / "flow.s8"
     gpath = tmp_path / "grid.s8"
-    write_binary_direct(fpath, gpath, GRID, FLOW)
+    write_binary_direct(fpath, gpath, _ds(GRID, FLOW))
 
     info = get_info(fpath)
     assert info.format == "split"
@@ -68,7 +81,7 @@ def test_info_s4(tmp_path: Path) -> None:
     """get_info on a .s4 file auto-resolves the .cd companion."""
     fpath = tmp_path / "flow.s4"
     gpath = tmp_path / "grid.s4"
-    write_binary_direct(fpath, gpath, GRID, FLOW)
+    write_binary_direct(fpath, gpath, _ds(GRID, FLOW))
 
     info = get_info(fpath)
     assert info.format == "split"
@@ -90,7 +103,7 @@ def test_info_s8_missing_cd(tmp_path: Path) -> None:
 def test_info_hdf5(tmp_path: Path) -> None:
     """get_info on a .h5 file returns hdf5 metadata."""
     h5 = tmp_path / "data.h5"
-    write_hdf5(h5, GRID, FLOW)
+    write_hdf5(h5, _ds(GRID, FLOW))
 
     info = get_info(h5)
     assert info.format == "hdf5"
@@ -104,8 +117,19 @@ def test_info_hdf5(tmp_path: Path) -> None:
 
 def test_info_hdf5_multi_timestep(tmp_path: Path) -> None:
     """get_info on a multi-timestep HDF5."""
+    import h5py
+
     h5 = tmp_path / "data.h5"
-    write_hdf5(h5, GRID, FLOW, attrs={"timesteps": [100, 200]})
+    with h5py.File(h5, "w") as f:
+        g = f.create_group("grid")
+        g.create_dataset("x", data=GRID["x"])
+        g.create_dataset("y", data=GRID["y"])
+        g.create_dataset("z", data=GRID["z"])
+        fg = f.create_group("flow")
+        ts1 = fg.create_group("00100")
+        ts1.create_dataset("uvel", data=FLOW["uvel"])
+        ts2 = fg.create_group("00200")
+        ts2.create_dataset("uvel", data=FLOW["uvel"])
 
     info = get_info(h5)
     assert info.format == "hdf5"
@@ -119,7 +143,7 @@ def test_info_hdf5_multi_timestep(tmp_path: Path) -> None:
 def test_info_plot3d_grid(tmp_path: Path) -> None:
     """get_info on a .x file returns plot3d grid metadata."""
     xfile = tmp_path / "grid.x"
-    write_plot3d(xfile, GRID)
+    write_plot3d(xfile, _ds(GRID))
 
     info = get_info(xfile)
     assert info.format == "plot3d"
@@ -166,7 +190,7 @@ def test_info_plot3d_flow(tmp_path: Path) -> None:
 def test_info_tecplot_ascii(tmp_path: Path) -> None:
     """get_info on a .dat file returns tecplot metadata."""
     dat = tmp_path / "data.dat"
-    write_tecplot_ascii(dat, GRID, FLOW)
+    write_tecplot_ascii(dat, _ds(GRID, FLOW))
 
     info = get_info(dat)
     assert info.format == "tecplot"

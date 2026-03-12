@@ -47,8 +47,10 @@ def write_plot3d(
     if not isinstance(dataset.grid, StructuredGrid):
         raise TypeError("write_plot3d requires a StructuredGrid")
 
-    # unpack grid to dict for internal writers
-    grid = {"x": dataset.grid.x, "y": dataset.grid.y, "z": dataset.grid.z}
+    # unpack grid to dict for internal writers (omit z for 2-D)
+    grid = {"x": dataset.grid.x, "y": dataset.grid.y}
+    if dataset.grid.ndim == 3:
+        grid["z"] = dataset.grid.z
 
     if not grid:
         raise ValueError("grid dict must not be empty")
