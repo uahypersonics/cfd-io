@@ -12,7 +12,6 @@ from cfd_io.readers.cgns import (
     read_cgns,
 )
 
-
 # ── helpers to build minimal CGNS files ──────────────────────────────
 
 def _set_label(group: h5py.Group, label: str) -> None:
@@ -64,9 +63,9 @@ def _make_cgns_file(
         _set_label(zone, "Zone_t")
 
         if mixed and conn_1based is not None:
-            n_cells = 0  # calculated below from offsets
+            pass  # n_cells calculated below from offsets
         elif conn_1based is not None and not mixed:
-            nodes_per = len(conn_1based) // (len(conn_1based) // n_pts) if n_pts else 4
+            pass  # uniform element type
         else:
             conn_1based = np.arange(1, n_pts + 1, dtype=np.int64)
 
@@ -269,7 +268,7 @@ class TestReadCGNSErrors:
 
     def test_no_base(self, tmp_path):
         path = tmp_path / "empty.cgns"
-        with h5py.File(path, "w") as f:
+        with h5py.File(path, "w"):
             pass
         with pytest.raises(ValueError, match="no CGNSBase_t"):
             read_cgns(path)
