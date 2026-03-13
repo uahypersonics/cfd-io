@@ -24,6 +24,7 @@ from cfd_io.readers.plot3d_flow_binary import read_plot3d_flow_binary
 from cfd_io.readers.plot3d_grid_ascii import read_plot3d_grid_ascii
 from cfd_io.readers.plot3d_grid_binary import read_plot3d_grid_binary
 from cfd_io.readers.tecplot_ascii import read_tecplot_ascii
+from cfd_io.readers.cgns import read_cgns
 from cfd_io.readers.vtu import read_vtu
 from cfd_io.writers.fortran_binary_sequential import FortranBinaryWriter
 from cfd_io.writers.hdf5 import write_hdf5
@@ -54,6 +55,7 @@ __all__ = [
     "get_info",
     "read_binary_direct",
     "read_binary_direct_x_line",
+    "read_cgns",
     "read_binary_direct_xy_plane",
     "read_binary_direct_xyz_volume",
     "read_file",

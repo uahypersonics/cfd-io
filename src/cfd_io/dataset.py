@@ -60,11 +60,20 @@ class StructuredGrid:
 # --------------------------------------------------
 @dataclass
 class UnstructuredGrid:
-    """Unstructured node/cell mesh (stub - no readers produce this yet)."""
+    """Unstructured node/cell mesh.
 
-    points: np.ndarray  # (npts, ndim)
-    connectivity: np.ndarray
-    cell_types: np.ndarray
+    Follows the VTK convention of three parallel arrays:
+
+    - ``connectivity`` — flat array of 0-based node indices for all cells.
+    - ``offsets`` — ``(n_cells + 1,)`` array where cell *i* owns
+      ``connectivity[offsets[i]:offsets[i+1]]``.
+    - ``cell_types`` — one element-type code per cell (CGNS codes).
+    """
+
+    points: np.ndarray       # (npts, ndim)
+    connectivity: np.ndarray # flat node indices
+    offsets: np.ndarray      # (n_cells + 1,)
+    cell_types: np.ndarray   # (n_cells,)
 
 
 Grid = StructuredGrid | UnstructuredGrid

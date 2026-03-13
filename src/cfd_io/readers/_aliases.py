@@ -41,6 +41,15 @@ VAR_ALIASES: dict[str, str] = {
     "density": "dens",
     # mach number
     "m": "mach",
+    # cgns standard names
+    "coordinatex": "x",
+    "coordinatey": "y",
+    "coordinatez": "z",
+    "velocitymagnitude": "vel_mag",
+    "axial_velocity": "uvel",
+    "radial_velocity": "vvel",
+    "temperaturestagnation": "temp_stag",
+    "coefpressure": "cp",
     # su2 variable names
     "velocity": "vel",
     "skin_friction_coefficient": "cf",
@@ -66,9 +75,8 @@ def normalize(var_name: str) -> str:
     """Return the canonical variable name for *var_name*.
 
     Performs a case-insensitive lookup in ``VAR_ALIASES``.  If no alias
-    is found the original *var_name* is returned unchanged.
+    is found the lower-cased *var_name* is returned as-is.
     """
 
-    var_name_normalized = VAR_ALIASES.get(var_name.lower(), var_name)
-
-    return var_name_normalized
+    key = var_name.lower()
+    return VAR_ALIASES.get(key, key)
