@@ -61,6 +61,7 @@ _WRITER_REGISTRY: dict[str, str] = {
     ".xyz": "plot3d",
     ".dat": "tecplot",
     ".plt": "tecplot_binary",
+    ".su2": "su2",
 }
 
 # --------------------------------------------------
@@ -271,6 +272,13 @@ def write_file(
 
         write_tecplot_plt(fpath, dataset)
         return fpath
+
+    elif fmt == "su2":
+
+        # lazy import of appropriate writer
+        from cfd_io.writers.su2 import write_su2
+
+        return write_su2(fpath, dataset)
 
     else:
         raise ValueError(f"unsupported format: {fmt}")
