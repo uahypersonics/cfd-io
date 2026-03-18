@@ -232,6 +232,14 @@ def write_file(
         from cfd_io.writers.fortran_binary_direct import write_binary_direct
 
         if grid_file is None:
+            # grid-only dataset: use fpath as the grid file
+            if not dataset.flow:
+                _flow_path, grid_path = write_binary_direct(
+                    fpath=fpath,
+                    gpath=fpath,
+                    dataset=dataset,
+                )
+                return grid_path
             raise ValueError(
                 "split format requires a separate grid file; "
                 "pass grid_file='...'"
