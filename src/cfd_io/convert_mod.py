@@ -50,6 +50,7 @@ _READER_REGISTRY: dict[str, str] = {
     ".plt": "tecplot_binary",
     ".vtu": "vtu",
     ".cgns": "cgns",
+    ".su2": "su2",
 }
 
 _WRITER_REGISTRY: dict[str, str] = {
@@ -187,6 +188,11 @@ def read_file(
         from cfd_io.readers.cgns import read_cgns
 
         return read_cgns(fpath)
+
+    elif fmt == "su2":
+        from cfd_io.readers.su2 import read_su2
+
+        return read_su2(fpath)
 
     else:
         raise ValueError(f"unsupported format: {fmt}")
