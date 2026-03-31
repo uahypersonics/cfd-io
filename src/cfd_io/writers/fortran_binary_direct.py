@@ -25,6 +25,35 @@ logger = logging.getLogger(__name__)
 
 
 # --------------------------------------------------
+# array helpers
+# --------------------------------------------------
+def _promote_2d_to_3d(arr: np.ndarray, *, var_name: str) -> np.ndarray:
+    """Promote a 2-D array to 3-D by adding a singleton z-axis.
+
+    Args:
+        arr: Input array with ndim 2 or 3.
+        var_name: Variable name used for error messages.
+
+    Returns:
+        3-D array with shape ``(nx, ny, nz)``.
+
+    Raises:
+        ValueError: If the array is not 2-D or 3-D.
+    """
+    # keep arrays that already have explicit z-dimension
+    if arr.ndim == 3:
+        return arr
+
+    # promote 2-D arrays to nz=1 for split-format compatibility
+    if arr.ndim == 2:
+        return arr[:, :, None]
+
+    raise ValueError(
+        f"expected 2-D or 3-D arrays, got ndim={arr.ndim} for '{var_name}'"
+    )
+
+
+# --------------------------------------------------
 # header file writer
 # --------------------------------------------------
 def _write_header(
@@ -212,14 +241,28 @@ def write_binary_direct(
     elif flow:
         dict_tmp = flow
 
+    # promote grid arrays to 3-D when they are 2-D
+    if grid:
+        grid = {
+            name: _promote_2d_to_3d(np.asarray(arr), var_name=name)
+            for name, arr in grid.items()
+        }
+
+    # promote flow arrays to 3-D when they are 2-D
+    if flow:
+        flow = {
+            name: _promote_2d_to_3d(np.asarray(arr), var_name=name)
+            for name, arr in flow.items()
+        }
+
+    # refresh dict_tmp after promotion
+    if grid:
+        dict_tmp = grid
+    elif flow:
+        dict_tmp = flow
+
     # grab first array in the dict to check dimensions
     arr_tmp = next(iter(dict_tmp.values()))
-
-    # check that arrays are 3-D
-    if arr_tmp.ndim != 3:
-        raise ValueError(
-            f"expected 3-D grid arrays, got ndim={arr_tmp.ndim}"
-        )
 
     # extract dimensions
     nx, ny, nz = arr_tmp.shape

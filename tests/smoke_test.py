@@ -28,6 +28,8 @@ NX, NY, NZ = 10, 8, 3
 np.random.seed(42)
 GRID = {"x": np.random.rand(NX, NY, NZ), "y": np.random.rand(NX, NY, NZ)}
 FLOW = {"uvel": np.random.rand(NX, NY, NZ), "temp": np.random.rand(NX, NY, NZ)}
+GRID_2D = {"x": np.random.rand(NX, NY), "y": np.random.rand(NX, NY)}
+FLOW_2D = {"uvel": np.random.rand(NX, NY), "temp": np.random.rand(NX, NY)}
 
 
 def _ds(grid, flow=None, attrs=None):
@@ -181,3 +183,40 @@ def test_convert_f64_to_f32(tmp_path: Path) -> None:
 
     header = read_header(flow_f32.with_suffix(".cd"))
     assert header.dtype == np.float32
+
+
+def test_write_split_with_2d_arrays_promotes_to_nz1(tmp_path: Path) -> None:
+    """Split writer accepts 2-D arrays by promoting them to nz=1."""
+    flow_out = tmp_path / "flow_2d.s8"
+    grid_out = tmp_path / "grid_2d.s8"
+
+    # write 2-D dataset to split format
+    write_binary_direct(flow_out, grid_out, _ds(GRID_2D, FLOW_2D))
+
+    # check header dimensions reflect nz=1 promotion
+    flow_header = read_header(flow_out.with_suffix(".cd"))
+    assert flow_header.nx == NX
+    assert flow_header.ny == NY
+    assert flow_header.nz == 1
+
+    # check round-trip values with explicit singleton z-axis
+    ds = read_binary_direct(flow_out, grid_out)
+    assert ds.grid.x.shape == (NX, NY, 1)
+    assert np.allclose(ds.grid.x[:, :, 0], GRID_2D["x"])
+    assert np.allclose(ds.flow["uvel"].data[:, :, 0], FLOW_2D["uvel"])
+
+
+def test_convert_hdf5_2d_to_split(tmp_path: Path) -> None:
+    """Dispatcher converts 2-D HDF5 to split format by writing nz=1."""
+    h5 = tmp_path / "test_2d.h5"
+    write_hdf5(h5, _ds(GRID_2D, FLOW_2D))
+
+    flow_out = tmp_path / "back_2d.s8"
+    grid_out = tmp_path / "back_grid_2d.s8"
+    do_convert(h5, flow_out, output_grid=grid_out)
+
+    # check converted split data is readable and promoted to 3-D
+    ds = read_binary_direct(flow_out, grid_out)
+    assert ds.grid.x.shape == (NX, NY, 1)
+    assert np.allclose(ds.grid.x[:, :, 0], GRID_2D["x"])
+    assert np.allclose(ds.flow["temp"].data[:, :, 0], FLOW_2D["temp"])
