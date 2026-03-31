@@ -7,6 +7,7 @@ from typer.testing import CliRunner
 
 from cfd_io.cli import app
 from cfd_io.dataset import Dataset, Field, StructuredGrid
+from cfd_io.readers.fortran_binary_direct import read_header
 from cfd_io.writers.fortran_binary_direct import write_binary_direct
 from cfd_io.writers.hdf5 import write_hdf5
 
@@ -93,6 +94,28 @@ def test_cli_convert_hdf5_to_split(tmp_path: Path) -> None:
     ])
     assert result.exit_code == 0
     assert out_flow.exists()
+
+
+def test_cli_convert_hdf5_to_split_swap_ij(tmp_path: Path) -> None:
+    """CLI 'convert' from HDF5 to split with --swap-ij."""
+    h5 = tmp_path / "data.h5"
+    write_hdf5(h5, _ds(GRID, FLOW))
+
+    out_flow = tmp_path / "out_swap.s8"
+    out_grid = tmp_path / "out_swap_grid.s8"
+    result = runner.invoke(app, [
+        "convert", str(h5),
+        "-o", str(out_flow),
+        "--grid-out", str(out_grid),
+        "--swap-ij",
+    ])
+    assert result.exit_code == 0
+
+    # verify split header reflects swapped dimensions
+    header = read_header(out_flow.with_suffix(".cd"))
+    assert header.nx == NY
+    assert header.ny == NX
+    assert header.nz == NZ
 
 
 def test_cli_convert_with_attrs(tmp_path: Path) -> None:

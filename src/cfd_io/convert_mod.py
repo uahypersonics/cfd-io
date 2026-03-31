@@ -26,7 +26,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from cfd_io.dataset import Dataset
+import numpy as np
+
+from cfd_io.dataset import Dataset, Field, StructuredGrid
 
 # --------------------------------------------------
 # set up logger
@@ -308,6 +310,7 @@ def do_convert(
     input_grid: str | Path | None = None,
     output_grid: str | Path | None = None,
     it: int = 1,
+    swap_ij: bool = False,
     attrs: dict[str, Any] | None = None,
     dtype: str = "f",
 ) -> Path:
@@ -322,6 +325,7 @@ def do_convert(
         input_grid: Grid file for the source (split format input).
         output_grid: Grid file for the destination (split format output).
         it: Timestep index, 1-based (split format input).
+        swap_ij: If True, swap i and j axes before writing output.
         attrs: Extra metadata to merge into the output.  These override
             any attributes already present in the source file.
         dtype: NumPy dtype for HDF5 output.
@@ -345,6 +349,30 @@ def do_convert(
         grid_file=input_grid,
         it=it,
     )
+
+    # swap i/j axes when requested
+    if swap_ij:
+        # swap axes in grid coordinates
+        grid_out = StructuredGrid(
+            np.swapaxes(ds.grid.x, 0, 1),
+            np.swapaxes(ds.grid.y, 0, 1),
+            np.swapaxes(ds.grid.z, 0, 1),
+        )
+
+        # swap axes in all flow variables
+        flow_out: dict[str, Field] = {}
+        for name, field in ds.flow.items():
+            flow_out[name] = Field(
+                data=np.swapaxes(field.data, 0, 1),
+                association=field.association,
+            )
+
+        # rebuild dataset with swapped orientation
+        ds = Dataset(
+            grid=grid_out,
+            flow=flow_out,
+            attrs=dict(ds.attrs),
+        )
 
     # merge: file attrs as base, caller overrides on top
     if attrs:

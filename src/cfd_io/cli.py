@@ -115,6 +115,11 @@ def convert(
         "--grid-out", "-G",
         help="Output grid file (required for split format output).",
     ),
+    swap_ij: bool = typer.Option(
+        False,
+        "--swap-ij",
+        help="Swap i/j axes before writing output.",
+    ),
     debug: bool = typer.Option(False, "--debug", help="Enable debug logging."),
     attr: list[str] | None = typer.Option(
         None, "--attr", "-a",
@@ -147,6 +152,7 @@ def convert(
         output_path=output,
         input_grid=grid,
         output_grid=output_grid,
+        swap_ij=swap_ij,
         attrs=attrs if attrs else None,
     )
 
