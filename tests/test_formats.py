@@ -128,6 +128,34 @@ def test_tecplot_ascii_grid_only(tmp_path: Path) -> None:
     assert len(ds.flow) == 0
 
 
+def test_tecplot_ascii_without_coordinates_loads_flow_only(tmp_path: Path) -> None:
+    """Tecplot ASCII without x/y/z loads as flow-only dataset."""
+    p = tmp_path / "lst_like.dat"
+
+    p.write_text(
+        "\n".join(
+            [
+                'TITLE = "LST table"',
+                'VARIABLES = "s", "nfact", "amp"',
+                'ZONE I=5, J=1, F=POINT',
+                "0.0  0.5  1.0",
+                "0.1  0.6  1.1",
+                "0.2  0.7  1.2",
+                "0.3  0.8  1.3",
+                "0.4  0.9  1.4",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    ds = read_tecplot_ascii(p)
+
+    assert ds.grid is None
+    assert set(ds.flow.keys()) == {"s", "nfact", "amp"}
+    assert ds.flow["s"].data.shape == (5, 1, 1)
+    assert np.allclose(ds.flow["amp"].data[:, 0, 0], [1.0, 1.1, 1.2, 1.3, 1.4])
+
+
 # ======================================================================
 # grid-only binary-direct conversion
 # ======================================================================

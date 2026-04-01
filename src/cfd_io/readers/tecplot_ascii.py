@@ -129,13 +129,32 @@ def read_tecplot_ascii(
     if title:
         attrs["title"] = title
 
+    # build structured grid only when x and y coordinates are present
+    if "x" in grid and "y" in grid:
+        grid_obj = StructuredGrid(
+            grid["x"],
+            grid["y"],
+            grid.get("z", np.zeros_like(grid["x"])),
+        )
+    else:
+        # when coordinate variables are absent, keep all variables as flow
+        # so non-CFD Tecplot tables (e.g. LST output) can still be loaded
+        for var_name, arr in grid.items():
+            flow[var_name] = arr
+
+        grid_obj = None
+        logger.warning(
+            "read_tecplot_ascii: missing x/y coordinates; returning flow-only dataset for %s",
+            fpath,
+        )
+
     logger.info(
         "read_tecplot_ascii: grid(%d) + flow(%d) from %s",
         len(grid), len(flow), fpath,
     )
 
     return Dataset(
-        grid=StructuredGrid(grid["x"], grid["y"], grid.get("z", np.zeros_like(grid["x"]))),
+        grid=grid_obj,
         flow={k: Field(v) for k, v in flow.items()},
         attrs=attrs,
     )
