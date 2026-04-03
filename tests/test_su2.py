@@ -16,12 +16,9 @@ import pytest
 
 from cfd_io.dataset import Dataset, StructuredGrid
 from cfd_io.writers.su2 import (
-    _extract_markers,
-    _required_sides,
     structured_to_unstructured,
     write_su2,
 )
-
 
 # =====================================================================
 #  Fixtures
@@ -286,7 +283,7 @@ class TestNegative:
     def test_2d_grid_with_3d_marker_keys(self):
         """2-D grid should reject kmin/kmax marker keys (not required)."""
         grid = _make_grid_3x2()
-        markers_with_k = {
+        _markers_with_k = {
             "imin": "inlet", "imax": "outlet",
             "jmin": "wall", "jmax": "farfield",
             "kmin": "sym", "kmax": "top",
