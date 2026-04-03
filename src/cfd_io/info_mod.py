@@ -30,6 +30,7 @@ class FileInfo:
     timesteps: list[int] = field(default_factory=list)
     precision: str = ""
     format: str = ""
+    attrs: dict[str, object] = field(default_factory=dict)
 
 
 # --------------------------------------------------
@@ -124,11 +125,33 @@ def _info_from_hdf5(fpath: Path) -> FileInfo:
         nx, ny, nz = 0, 0, 0
         precision = ""
 
+        # read root attributes when present
+        attrs: dict[str, object] = {}
+        for key, value in fobj.attrs.items():
+            if hasattr(value, "item"):
+                try:
+                    attrs[key] = value.item()
+                    continue
+                except Exception:
+                    pass
+            attrs[key] = value
+
         # infer grid dimensions from first grid dataset
         if "grid" in fobj and isinstance(fobj["grid"], h5py.Group):
             for name in fobj["grid"]:
                 ds = fobj["grid"][name]
                 if isinstance(ds, h5py.Dataset):
+                    shape = ds.shape
+                    nx = shape[0] if len(shape) > 0 else 0
+                    ny = shape[1] if len(shape) > 1 else 0
+                    nz = shape[2] if len(shape) > 2 else 0
+                    precision = str(ds.dtype)
+                    break
+        else:
+            # fallback: infer dimensions from root-level x/y/z datasets
+            for coord_name in ("x", "y", "z"):
+                if coord_name in fobj and isinstance(fobj[coord_name], h5py.Dataset):
+                    ds = fobj[coord_name]
                     shape = ds.shape
                     nx = shape[0] if len(shape) > 0 else 0
                     ny = shape[1] if len(shape) > 1 else 0
@@ -156,7 +179,13 @@ def _info_from_hdf5(fpath: Path) -> FileInfo:
             # multi-timestep layout
             if ts_groups:
                 ts_groups.sort()
-                timesteps = [int(t) for t in ts_groups]
+                parsed_timesteps: list[int] = []
+                for token in ts_groups:
+                    try:
+                        parsed_timesteps.append(int(token))
+                    except ValueError:
+                        continue
+                timesteps = parsed_timesteps
                 # get var names from first timestep group
                 first_ts = flow_grp[ts_groups[0]]
                 var_names = [n for n in first_ts if isinstance(first_ts[n], h5py.Dataset)]
@@ -164,6 +193,17 @@ def _info_from_hdf5(fpath: Path) -> FileInfo:
             # flat layout
             elif flat_datasets:
                 var_names = flat_datasets
+        else:
+            # fallback: flat root-level datasets (x/y/z are coordinates, others are variables)
+            coord_names = {"x", "y", "z"}
+            root_datasets = [
+                name for name in fobj
+                if isinstance(fobj[name], h5py.Dataset)
+            ]
+            var_names = [name for name in root_datasets if name not in coord_names]
+
+            if not precision and root_datasets:
+                precision = str(fobj[root_datasets[0]].dtype)
 
         return FileInfo(
             nx=nx,
@@ -175,6 +215,7 @@ def _info_from_hdf5(fpath: Path) -> FileInfo:
             timesteps=timesteps,
             precision=precision,
             format="hdf5",
+            attrs=attrs,
         )
 
 

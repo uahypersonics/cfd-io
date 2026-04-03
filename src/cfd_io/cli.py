@@ -92,6 +92,10 @@ def info(
         typer.echo(f"  indices: {file_info.timesteps}")
     if file_info.precision:
         typer.echo(f"precision: {file_info.precision}")
+    if file_info.attrs:
+        typer.echo("attributes:")
+        for key in sorted(file_info.attrs):
+            typer.echo(f"  {key}: {file_info.attrs[key]}")
 
 
 # --------------------------------------------------

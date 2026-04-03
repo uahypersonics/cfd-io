@@ -136,6 +136,30 @@ def test_info_hdf5_multi_timestep(tmp_path: Path) -> None:
     assert info.nt >= 1
 
 
+def test_info_hdf5_root_level_layout_with_attrs(tmp_path: Path) -> None:
+    """get_info supports root-level HDF5 layout with root attributes."""
+    import h5py
+
+    h5 = tmp_path / "root_layout.h5"
+    with h5py.File(h5, "w") as fobj:
+        fobj.attrs["mach"] = 6.0
+        fobj.attrs["re1"] = 1.0e7
+        fobj.create_dataset("x", data=GRID["x"])
+        fobj.create_dataset("y", data=GRID["y"])
+        fobj.create_dataset("dens", data=FLOW["uvel"])
+        fobj.create_dataset("temp", data=FLOW["pres"])
+
+    info = get_info(h5)
+    assert info.format == "hdf5"
+    assert info.nx == NX
+    assert info.ny == NY
+    assert info.nz == NZ
+    assert info.np == 2
+    assert set(info.var_names) == {"dens", "temp"}
+    assert info.attrs["mach"] == pytest.approx(6.0)
+    assert info.attrs["re1"] == pytest.approx(1.0e7)
+
+
 # ======================================================================
 # Plot3D grid (.x)
 # ======================================================================

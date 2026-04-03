@@ -47,6 +47,18 @@ def test_cli_info_hdf5(tmp_path: Path) -> None:
     assert str(NX) in result.output
 
 
+def test_cli_info_hdf5_with_attrs(tmp_path: Path) -> None:
+    """CLI 'info --attrs' prints HDF5 attributes when available."""
+    h5 = tmp_path / "data_attrs.h5"
+    write_hdf5(h5, _ds(GRID, FLOW, attrs={"mach": 6.0, "re1": 1.0e7}))
+
+    result = runner.invoke(app, ["info", str(h5), "--attrs"])
+    assert result.exit_code == 0
+    assert "attributes:" in result.output
+    assert "mach" in result.output
+    assert "re1" in result.output
+
+
 def test_cli_info_split(tmp_path: Path) -> None:
     """CLI 'info' on a .cd file prints split metadata."""
     fpath = tmp_path / "flow.s8"
