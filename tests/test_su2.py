@@ -255,10 +255,17 @@ class TestNegative:
         with pytest.raises(TypeError, match="must be a dict"):
             write_su2("/tmp/bad.su2", ds)
 
-    def test_no_markers_key(self):
+    def test_no_markers_key(self, tmp_path):
+        """Missing 'markers' key auto-generates identity defaults."""
         ds = Dataset(grid=_make_grid_3x2(), attrs={})
-        with pytest.raises(TypeError, match="markers"):
-            write_su2("/tmp/bad.su2", ds)
+        out = tmp_path / "auto.su2"
+        write_su2(out, ds)
+        text = out.read_text()
+        # identity-default tags appear as MARKER_TAGs in the file
+        assert "MARKER_TAG= imin" in text
+        assert "MARKER_TAG= imax" in text
+        assert "MARKER_TAG= jmin" in text
+        assert "MARKER_TAG= jmax" in text
 
     def test_grid_too_small(self):
         """A 1×2 grid cannot form cells in the i-direction."""

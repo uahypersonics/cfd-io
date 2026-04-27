@@ -113,17 +113,25 @@ def _validate_markers(markers: dict, required: list[str]) -> None:
 # --------------------------------------------------
 # helper function to extract and validate markers from dataset.attrs
 # --------------------------------------------------
-def _extract_markers(attrs: dict) -> dict[str, str]:
+def _extract_markers(attrs: dict, required: list[str]) -> dict[str, str]:
     """Extract ``attrs["markers"]["structured"]``.
 
+    If ``attrs["markers"]`` is missing entirely, return identity-name
+    defaults for every required side (e.g. ``imin -> "imin"``).  This
+    lets readers that carry no boundary metadata (like the generic HDF5
+    baseflow format) still produce a valid SU2 file with placeholder
+    tag names the user can rename in their SU2 config.
+
     Raises:
-        TypeError: Wrong container type or missing namespace key.
+        TypeError: ``markers`` is present but malformed.
     """
     if "markers" not in attrs:
-        raise TypeError(
-            "dataset.attrs must contain a 'markers' key "
-            "with boundary definitions"
+        # auto-generate identity defaults so writer succeeds without metadata
+        logger.warning(
+            "dataset.attrs has no 'markers' key; using identity defaults "
+            "%s (rename in your SU2 config as needed)", required,
         )
+        return {side: side for side in required}
     markers_top = attrs["markers"]
     if not isinstance(markers_top, dict):
         raise TypeError(
@@ -546,8 +554,10 @@ def write_su2(fpath: str | Path, dataset) -> Path:
         )
 
     # Extract and validate markers
-    markers = _extract_markers(dataset.attrs)
     ndim = dataset.grid.ndim
+    active_axes = _get_active_axes(dataset.grid.x.shape)
+    required = _required_sides(active_axes)
+    markers = _extract_markers(dataset.attrs, required)
 
     # Convert to unstructured representation
     points, elements, boundary_elements = structured_to_unstructured(
