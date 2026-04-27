@@ -28,6 +28,7 @@ import logging
 import numpy as np
 
 from cfd_io.dataset import Dataset, Field, StructuredGrid
+
 # --------------------------------------------------
 # set up logger
 # --------------------------------------------------
