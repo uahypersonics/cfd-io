@@ -108,6 +108,7 @@ def read_file(
     *,
     grid_file: str | Path | None = None,
     it: int = 1,
+    orient: bool = True,
 ) -> Dataset:
     """Read a file, dispatching by extension.
 
@@ -116,6 +117,10 @@ def read_file(
         grid_file: Path to the grid file (required for split formats;
             ignored for HDF5).
         it: Timestep index, 1-based (split format only).
+        orient: If True (default), the returned dataset is reoriented to
+            the canonical layout (j=0 wall, +i streamwise) using
+            `cfd_io.orient.canonicalize_dataset`.  Pass ``orient=False``
+            to keep the on-disk index ordering.
 
     Returns:
         `Dataset` containing grid, flow, and metadata.
@@ -134,6 +139,7 @@ def read_file(
     # debug output for devs
     logger.info("read_file: %s  (format=%s)", fpath, fmt)
 
+    # dispatch to the format-specific reader
     if fmt == "split":
 
         # lazy import of appropriate reader (deferred until we know it is needed to avoid circular import)
@@ -145,7 +151,7 @@ def read_file(
                 "pass grid_file='...'"
             )
 
-        return read_binary_direct(
+        ds = read_binary_direct(
             fpath=fpath,
             gpath=grid_file,
             it=it,
@@ -155,49 +161,56 @@ def read_file(
         # lazy import of appropriate reader (deferred until we know it is needed to avoid circular import)
         from cfd_io.readers.hdf5 import read_hdf5
 
-        return read_hdf5(fpath)
+        ds = read_hdf5(fpath)
 
     elif fmt == "plot3d":
         # lazy import of appropriate reader (deferred until we know it is needed to avoid circular import)
         from cfd_io.readers.plot3d import read_plot3d
 
-        return read_plot3d(fpath)
+        ds = read_plot3d(fpath)
 
     elif fmt == "plot3d_flow":
         # lazy import of appropriate reader (deferred until we know it is needed to avoid circular import)
         from cfd_io.readers.plot3d_flow import read_plot3d_flow
 
-        return read_plot3d_flow(fpath)
+        ds = read_plot3d_flow(fpath)
 
     elif fmt == "tecplot":
         # lazy import of appropriate reader (deferred until we know it is needed to avoid circular import)
         from cfd_io.readers.tecplot_ascii import read_tecplot_ascii
 
-        return read_tecplot_ascii(fpath)
+        ds = read_tecplot_ascii(fpath)
 
     elif fmt == "tecplot_binary":
         # lazy import of appropriate reader (deferred until we know it is needed to avoid circular import)
         from cfd_io.readers.tecplot_binary import read_tecplot_plt
 
-        return read_tecplot_plt(fpath)
+        ds = read_tecplot_plt(fpath)
 
     elif fmt == "vtu":
         from cfd_io.readers.vtu import read_vtu
 
-        return read_vtu(fpath)
+        ds = read_vtu(fpath)
 
     elif fmt == "cgns":
         from cfd_io.readers.cgns import read_cgns
 
-        return read_cgns(fpath)
+        ds = read_cgns(fpath)
 
     elif fmt == "su2":
         from cfd_io.readers.su2 import read_su2
 
-        return read_su2(fpath)
+        ds = read_su2(fpath)
 
     else:
         raise ValueError(f"unsupported format: {fmt}")
+
+    # post-read canonical orientation: j=0 wall, +i streamwise
+    if orient:
+        from cfd_io.orient import canonicalize_dataset
+        ds = canonicalize_dataset(ds)
+
+    return ds
 
 
 # --------------------------------------------------

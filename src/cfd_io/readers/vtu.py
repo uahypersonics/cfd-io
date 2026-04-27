@@ -305,9 +305,13 @@ def read_vtu(
     neighbors = _build_adjacency(conn, n_cells)
     cell_grid, ni, nj = _reconstruct_cells(conn, n_cells, neighbors, points)
 
-    # Extract structured node grid and flip j so j=0 is at wall
+    # Extract structured node grid.  Orientation (j=0 wall, +i streamwise)
+    # is now applied centrally by `cfd_io.convert_mod.read_file` via
+    # `cfd_io.orient.canonicalize_dataset`, so the reader just returns the
+    # grid in the order produced by the topology walk.
     node_grid = _extract_nodes(cell_grid, conn, points)
-    node_grid = node_grid[:, ::-1]
+
+    ni_nodes, nj_nodes = node_grid.shape
 
     # Build grid dict: (ni+1, nj+1, 1)
     grid: dict[str, np.ndarray] = {
@@ -336,15 +340,15 @@ def read_vtu(
 
     attrs: dict[str, Any] = {
         "format": "vtu",
-        "ni": ni + 1,
-        "nj": nj + 1,
+        "ni": ni_nodes,
+        "nj": nj_nodes,
         "nk": 1,
         "n_vars": len(flow),
     }
 
     logger.info(
         "  grid: (%d, %d, 1), %d flow variables",
-        ni + 1, nj + 1, len(flow),
+        ni_nodes, nj_nodes, len(flow),
     )
 
     return Dataset(

@@ -75,9 +75,17 @@ def write_tecplot_ascii(
         title = str(safe_attrs["title"])
 
     # -- determine dimensions from first grid array -----------------------
+    # promote 2-D arrays to 3-D with nk=1 so callers may pass either layout;
+    # this matches the canonical (ni, nj, nk) convention used elsewhere
+    def _ensure_3d(arr: np.ndarray) -> np.ndarray:
+        return arr[..., np.newaxis] if arr.ndim == 2 else arr
+
+    grid = {k: _ensure_3d(v) for k, v in grid.items()}
+    safe_flow = {k: _ensure_3d(v) for k, v in safe_flow.items()}
+
     x = grid["x"]
     if x.ndim != 3:
-        raise ValueError(f"expected 3-D arrays, got ndim={x.ndim}")
+        raise ValueError(f"expected 2-D or 3-D arrays, got ndim={x.ndim}")
 
     ni, nj, nk = x.shape
 
