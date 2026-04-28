@@ -161,3 +161,71 @@ def convert(
     )
 
     typer.echo(f"wrote {result}")
+
+
+# --------------------------------------------------
+# subcommand: attrs
+# --------------------------------------------------
+@app.command()
+def attrs(
+    path: Path = typer.Argument(..., help="Path to an HDF5 file (.h5, .hdf5)."),
+    attr: list[str] = typer.Option(
+        ...,
+        "--attr", "-a",
+        help="Attribute as key=value (repeatable, e.g. -a mach=6.0 -a re1=1e7). "
+             "Numeric values are stored as float; otherwise as string.",
+    ),
+    delete: list[str] = typer.Option(
+        [],
+        "--delete", "-d",
+        help="Attribute key to delete (repeatable).",
+    ),
+    debug: bool = typer.Option(False, "--debug", help="Enable debug logging."),
+) -> None:
+    """Add, update, or delete top-level attributes on an HDF5 file in place.
+
+    Useful for patching flow conditions (mach, re1, temp_inf, ...) onto an
+    existing HDF5 dataset that lacks them.
+    """
+
+    # set up logging
+    _configure_logging(debug)
+
+    # lazy import of h5py (HDF5-only operation)
+    import h5py
+
+    # validate input path
+    if not path.exists():
+        raise typer.BadParameter(f"file does not exist: {path}")
+    if path.suffix.lower() not in {".h5", ".hdf5"}:
+        raise typer.BadParameter(
+            f"expected .h5 or .hdf5 file, got '{path.suffix}'"
+        )
+
+    # parse --attr key=value pairs into a dict, coercing numerics where possible
+    new_attrs: dict[str, float | str] = {}
+    for item in attr:
+        if "=" not in item:
+            raise typer.BadParameter(f"expected key=value, got '{item}'")
+        k, v = item.split("=", 1)
+        try:
+            new_attrs[k] = float(v)
+        except ValueError:
+            new_attrs[k] = v
+
+    # open in read+write mode and patch attributes
+    with h5py.File(path, "r+") as fobj:
+        # delete requested keys first
+        for key in delete:
+            if key in fobj.attrs:
+                del fobj.attrs[key]
+                typer.echo(f"deleted: {key}")
+            else:
+                typer.echo(f"skip (not present): {key}")
+
+        # write new/updated attrs
+        for key, value in new_attrs.items():
+            fobj.attrs[key] = value
+            typer.echo(f"set: {key} = {value}")
+
+    typer.echo(f"updated {path}")
