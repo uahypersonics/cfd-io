@@ -116,22 +116,17 @@ def _validate_markers(markers: dict, required: list[str]) -> None:
 def _extract_markers(attrs: dict, required: list[str]) -> dict[str, str]:
     """Extract ``attrs["markers"]["structured"]``.
 
-    If ``attrs["markers"]`` is missing entirely, return identity-name
-    defaults for every required side (e.g. ``imin -> "imin"``).  This
-    lets readers that carry no boundary metadata (like the generic HDF5
-    baseflow format) still produce a valid SU2 file with placeholder
-    tag names the user can rename in their SU2 config.
-
     Raises:
-        TypeError: ``markers`` is present but malformed.
+        TypeError: ``markers`` is missing or malformed.
     """
     if "markers" not in attrs:
-        # auto-generate identity defaults so writer succeeds without metadata
-        logger.warning(
-            "dataset.attrs has no 'markers' key; using identity defaults "
-            "%s (rename in your SU2 config as needed)", required,
+        example = {s: s for s in required}
+        raise TypeError(
+            "dataset.attrs is missing 'markers'; SU2 writer requires "
+            "boundary tag names. Provide them as e.g.\n"
+            f"    dataset.attrs['markers'] = {{'structured': {example}}}\n"
+            "where each value is the SU2 MARKER_TAG string for that side."
         )
-        return {side: side for side in required}
     markers_top = attrs["markers"]
     if not isinstance(markers_top, dict):
         raise TypeError(
