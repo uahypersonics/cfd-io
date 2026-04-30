@@ -170,26 +170,6 @@ def test_convert_hdf5_to_split(tmp_path: Path) -> None:
     assert ds.grid.x is not None
 
 
-def test_convert_hdf5_to_split_swap_ij(tmp_path: Path) -> None:
-    """Convert HDF5 -> split with swapped i/j orientation."""
-    h5 = tmp_path / "test_swap.h5"
-    write_hdf5(h5, _ds(GRID, FLOW))
-
-    flow_out = tmp_path / "swap.s8"
-    grid_out = tmp_path / "swap_grid.s8"
-    do_convert(h5, flow_out, output_grid=grid_out, swap_ij=True)
-
-    # check header dimensions were swapped
-    header = read_header(flow_out.with_suffix(".cd"))
-    assert header.nx == NY
-    assert header.ny == NX
-    assert header.nz == NZ
-
-    # check data orientation was swapped in the output
-    ds = read_binary_direct(flow_out, grid_out)
-    assert np.allclose(ds.grid.x, np.swapaxes(GRID["x"], 0, 1))
-    assert np.allclose(ds.flow["uvel"].data, np.swapaxes(FLOW["uvel"], 0, 1))
-
 
 def test_convert_f64_to_f32(tmp_path: Path) -> None:
     """Convert float64 -> float32 via read_file/write_file dispatcher."""

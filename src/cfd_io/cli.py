@@ -57,7 +57,13 @@ def _configure_logging(debug: bool) -> None:
 # --------------------------------------------------
 @app.command()
 def formats() -> None:
-    """List supported file formats."""
+    """List supported file formats.
+
+    \b
+    Examples:
+        # show readers and writers
+        cfd-io formats
+    """
     from cfd_io.convert_mod import _READER_REGISTRY, _WRITER_REGISTRY
 
     readers = " ".join(sorted(_READER_REGISTRY))
@@ -73,7 +79,16 @@ def formats() -> None:
 def info(
     path: Path = typer.Argument(..., help="Path to a data file (.h5, .cd, .x, .dat)."),
 ) -> None:
-    """Show metadata summary for a CFD data file."""
+    """Show metadata summary for a CFD data file.
+
+    \b
+    Examples:
+        # inspect an HDF5 baseflow
+        cfd-io info base_flow.h5
+
+        # inspect a Plot3D grid file
+        cfd-io info grid.x
+    """
 
     # lazy import to keep CLI startup fast
     from cfd_io.info_mod import get_info
@@ -119,18 +134,29 @@ def convert(
         "--grid-out", "-G",
         help="Output grid file (required for split format output).",
     ),
-    swap_ij: bool = typer.Option(
-        False,
-        "--swap-ij",
-        help="Swap i/j axes before writing output.",
-    ),
     debug: bool = typer.Option(False, "--debug", help="Enable debug logging."),
     attr: list[str] | None = typer.Option(
         None, "--attr", "-a",
         help="Metadata as key=value (repeatable, e.g. --attr mach=6.0 --attr re=1e6).",
     ),
 ) -> None:
-    """Convert CFD data between formats (dispatched by file extension)."""
+    """Convert CFD data between formats (dispatched by file extension).
+
+    Pure format conversion only. Use ``cfd-ops transpose`` to swap axes
+    or other ``cfd-ops`` commands for any data transformation.
+
+    \b
+    Examples:
+        # HDF5 -> Plot3D split (grid + flow)
+        cfd-io convert base_flow.h5 -o flow.q -G grid.x
+
+        # Plot3D split -> HDF5 (single file)
+        cfd-io convert flow.q -g grid.x -o base_flow.h5
+
+        # convert and stamp flow-condition attributes
+        cfd-io convert flow.q -g grid.x -o base_flow.h5 \\
+            --attr mach=6.0 --attr re1=1e7 --attr temp_inf=54.0
+    """
 
     # set up logging
     _configure_logging(debug)
@@ -156,7 +182,6 @@ def convert(
         output_path=output,
         input_grid=grid,
         output_grid=output_grid,
-        swap_ij=swap_ij,
         attrs=attrs if attrs else None,
     )
 
@@ -186,6 +211,17 @@ def attrs(
 
     Useful for patching flow conditions (mach, re1, temp_inf, ...) onto an
     existing HDF5 dataset that lacks them.
+
+    \b
+    Examples:
+        # add freestream conditions
+        cfd-io attrs base_flow.h5 -a mach=6.0 -a re1=1e7 -a temp_inf=54.0
+
+        # update one attribute and delete another
+        cfd-io attrs base_flow.h5 -a mach=10.0 -d stale_key
+
+        # add a string-valued attribute
+        cfd-io attrs base_flow.h5 -a case_name=blunt_cone
     """
 
     # set up logging
