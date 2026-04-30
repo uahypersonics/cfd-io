@@ -1,11 +1,17 @@
 """HDF5 writer for CFD datasets.
 
 Writes structured grid and flow data into a grouped HDF5 layout with
-timestep sub-groups under ``/flow/``::
+timestep sub-groups under ``/flow/``.
 
-    /grid/x              (nx, ny, nz) float32
-    /grid/y              (nx, ny, nz) float32
-    /flow/00001/uvel     (nx, ny, nz) float32
+In-memory cfd-io contract is ``(ni, nj, nk)`` (so callers can write
+``arr[i, j, k]`` naturally).  On-disk convention is Fortran-order
+``(nk, nj, ni)`` to match Plot3D / Tecplot / CGNS, where the
+streamwise index ``i`` is the fastest-varying / contiguous axis.
+The writer transposes on write::
+
+    /grid/x              memory (ni, nj, nk) -> disk (nk, nj, ni) float32
+    /grid/y              ...
+    /flow/00001/uvel     memory (ni, nj, nk) -> disk (nk, nj, ni) float32
     /flow/00001/vvel     ...
     /flow/00002/uvel     ...
     root attrs:          mach, re1, temp_inf, ...
@@ -31,6 +37,40 @@ from cfd_io.dataset import Dataset, StructuredGrid
 # set up logger
 # --------------------------------------------------
 logger = logging.getLogger(__name__)
+
+
+# --------------------------------------------------
+# axis convention helper: memory -> disk
+# --------------------------------------------------
+def _mem_to_disk(arr: np.ndarray) -> np.ndarray:
+    """Convert an array from in-memory C order to on-disk Fortran order.
+
+    Memory convention (cfd-io ``(ni, nj, nk)``):
+        - 1D: ``(ni,)``
+        - 2D: ``(ni, nj)``
+        - 3D: ``(ni, nj, nk)``
+
+    Disk convention (Plot3D / Tecplot / CGNS):
+        - 1D: ``(ni,)``                  (unchanged)
+        - 2D: ``(nj, ni)``               (transpose)
+        - 3D: ``(nk, nj, ni)``           (reverse axes)
+
+    Returns a contiguous copy so h5py writes a clean dataset.
+    """
+    # 1d arrays have no axis ambiguity -- return as-is
+    if arr.ndim <= 1:
+        return np.ascontiguousarray(arr)
+
+    # 2d memory -> disk: simple transpose (ni, nj) -> (nj, ni)
+    if arr.ndim == 2:
+        return np.ascontiguousarray(arr.T)
+
+    # 3d memory -> disk: reverse axes (ni, nj, nk) -> (nk, nj, ni)
+    if arr.ndim == 3:
+        return np.ascontiguousarray(arr.transpose(2, 1, 0))
+
+    # higher-dim arrays are not part of the cfd-io contract -- leave alone
+    return np.ascontiguousarray(arr)
 
 
 # --------------------------------------------------
@@ -85,7 +125,8 @@ def write_hdf5(
         ordered_keys = [k for k in ("x", "y", "z") if k in grid]
         ordered_keys += [k for k in grid if k not in ordered_keys]
         for name in ordered_keys:
-            grid_grp.create_dataset(name, data=grid[name], dtype=dtype)
+            # transpose from memory (ni, nj, nk) to disk (nk, nj, ni) before write
+            grid_grp.create_dataset(name, data=_mem_to_disk(grid[name]), dtype=dtype)
 
         # -- /flow/<NNNNN>/ groups -------------------------------------
         flow_grp = fobj.create_group("flow")
@@ -101,7 +142,8 @@ def write_hdf5(
                 # skip metadata keys
                 if name.startswith("_"):
                     continue
-                ts_grp.create_dataset(name, data=data, dtype=dtype)
+                # transpose from memory (ni, nj, nk) to disk (nk, nj, ni) before write
+                ts_grp.create_dataset(name, data=_mem_to_disk(data), dtype=dtype)
 
             # per-timestep attributes
             if "_iteration" in ts_dict:

@@ -137,14 +137,23 @@ def _info_from_hdf5(fpath: Path) -> FileInfo:
             attrs[key] = value
 
         # infer grid dimensions from first grid dataset
+        # on-disk HDF5 layout is Fortran-order (nk, nj, ni) so we read
+        # nx from the LAST axis and nz from the FIRST axis
         if "grid" in fobj and isinstance(fobj["grid"], h5py.Group):
             for name in fobj["grid"]:
                 ds = fobj["grid"][name]
                 if isinstance(ds, h5py.Dataset):
                     shape = ds.shape
-                    nx = shape[0] if len(shape) > 0 else 0
-                    ny = shape[1] if len(shape) > 1 else 0
-                    nz = shape[2] if len(shape) > 2 else 0
+                    if len(shape) == 1:
+                        nx, ny, nz = shape[0], 0, 0
+                    elif len(shape) == 2:
+                        # disk (nj, ni)
+                        nx, ny, nz = shape[1], shape[0], 0
+                    elif len(shape) >= 3:
+                        # disk (nk, nj, ni)
+                        nx, ny, nz = shape[2], shape[1], shape[0]
+                    else:
+                        nx, ny, nz = 0, 0, 0
                     precision = str(ds.dtype)
                     break
         else:
@@ -153,9 +162,16 @@ def _info_from_hdf5(fpath: Path) -> FileInfo:
                 if coord_name in fobj and isinstance(fobj[coord_name], h5py.Dataset):
                     ds = fobj[coord_name]
                     shape = ds.shape
-                    nx = shape[0] if len(shape) > 0 else 0
-                    ny = shape[1] if len(shape) > 1 else 0
-                    nz = shape[2] if len(shape) > 2 else 0
+                    if len(shape) == 1:
+                        nx, ny, nz = shape[0], 0, 0
+                    elif len(shape) == 2:
+                        # disk (nj, ni)
+                        nx, ny, nz = shape[1], shape[0], 0
+                    elif len(shape) >= 3:
+                        # disk (nk, nj, ni)
+                        nx, ny, nz = shape[2], shape[1], shape[0]
+                    else:
+                        nx, ny, nz = 0, 0, 0
                     precision = str(ds.dtype)
                     break
 

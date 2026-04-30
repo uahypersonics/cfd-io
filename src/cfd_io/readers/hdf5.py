@@ -1,11 +1,20 @@
 """HDF5 reader for CFD datasets.
 
+On-disk axis convention is Fortran-order ``(nk, nj, ni)`` -- this
+matches Plot3D, Tecplot, CGNS, and most CFD solvers, where the
+streamwise index ``i`` is the fastest-varying / contiguous axis.
+
+In-memory cfd-io contract is ``(ni, nj, nk)`` so callers can write
+``arr[i, j, k]`` naturally.  The reader transposes on read so that
+disk ``(nk, nj, ni)`` becomes memory ``(ni, nj, nk)``; for 2D files
+disk ``(nj, ni)`` becomes memory ``(ni, nj)``.
+
 Reads the grouped timestep layout produced by
 ``cfd_io.writers.hdf5``::
 
-    /grid/x              (nx, ny, nz)
-    /grid/y              (nx, ny, nz)
-    /flow/00001/uvel     (nx, ny, nz)
+    /grid/x              (nk, nj, ni) on disk -> (ni, nj, nk) in memory
+    /grid/y              (nk, nj, ni)
+    /flow/00001/uvel     (nk, nj, ni)
     /flow/00001/vvel     ...
     /flow/00002/uvel     ...
     root attrs:          mach, re1, temp_inf, ...
@@ -37,6 +46,41 @@ from cfd_io.readers._aliases import GRID_NAMES, normalize
 # set up logger
 # --------------------------------------------------
 logger = logging.getLogger(__name__)
+
+
+# --------------------------------------------------
+# axis convention helper: disk -> memory
+# --------------------------------------------------
+def _disk_to_mem(arr: np.ndarray) -> np.ndarray:
+    """Convert an array from on-disk Fortran order to in-memory C order.
+
+    Disk convention (Plot3D / Tecplot / CGNS):
+        - 1D: ``(ni,)``
+        - 2D: ``(nj, ni)``
+        - 3D: ``(nk, nj, ni)``
+
+    Memory convention (cfd-io ``(ni, nj, nk)``):
+        - 1D: ``(ni,)``                  (unchanged)
+        - 2D: ``(ni, nj)``               (transpose)
+        - 3D: ``(ni, nj, nk)``           (reverse axes)
+
+    Returns a contiguous copy so downstream consumers see a clean
+    C-contiguous array regardless of source layout.
+    """
+    # 1d arrays have no axis ambiguity -- return as-is
+    if arr.ndim <= 1:
+        return np.ascontiguousarray(arr)
+
+    # 2d disk -> memory: simple transpose (nj, ni) -> (ni, nj)
+    if arr.ndim == 2:
+        return np.ascontiguousarray(arr.T)
+
+    # 3d disk -> memory: reverse axes (nk, nj, ni) -> (ni, nj, nk)
+    if arr.ndim == 3:
+        return np.ascontiguousarray(arr.transpose(2, 1, 0))
+
+    # higher-dim arrays are not part of the cfd-io contract -- leave alone
+    return np.ascontiguousarray(arr)
 
 
 # --------------------------------------------------
@@ -110,8 +154,9 @@ def read_hdf5(
             for name in fobj["grid"]:
                 # get grid group
                 grid_grp = fobj["grid"]
-                # read dataset into numpy array
-                grid[name] = np.array(grid_grp[name])
+                # read dataset into numpy array and convert from on-disk
+                # (nk, nj, ni) layout to in-memory (ni, nj, nk) layout
+                grid[name] = _disk_to_mem(np.array(grid_grp[name]))
                 # debug log for devs
                 logger.debug("  grid/%s: shape=%s", name, grid[name].shape)
 
@@ -243,8 +288,8 @@ def _read_flow_group(
 
             # only read datasets, skip any nested groups
             if isinstance(ds, h5py.Dataset):
-                # convert dataset to numpy array
-                flow[dataset_name] = np.array(ds)
+                # convert dataset to numpy array (disk -> memory axis order)
+                flow[dataset_name] = _disk_to_mem(np.array(ds))
                 logger.debug("  flow/%s: shape=%s", dataset_name, flow[dataset_name].shape)
 
         # return flow dict
@@ -296,7 +341,8 @@ def _read_flow_group(
             ds = timestep_grp[dataset_name]
             # only add verified datasets to timestep_dict, skip any nested groups
             if isinstance(ds, h5py.Dataset):
-                timestep_dict[dataset_name] = np.array(ds)
+                # disk -> memory axis order
+                timestep_dict[dataset_name] = _disk_to_mem(np.array(ds))
 
         # add timestep dict to flow dict under the integer timestep key
         flow[timestep_key] = timestep_dict
@@ -324,7 +370,8 @@ def _read_single_timestep(
         ds = timestep_grp[dataset_name]
         # only add verified datasets to result, skip any nested groups
         if isinstance(ds, h5py.Dataset):
-            result[dataset_name] = np.array(ds)
+            # disk -> memory axis order
+            result[dataset_name] = _disk_to_mem(np.array(ds))
             # debug log for devs
             logger.debug("  flow/%05d/%s: shape=%s", timestep_key, dataset_name, result[dataset_name].shape)
 
@@ -356,8 +403,8 @@ def _read_flat_root(
         if not isinstance(ds, h5py.Dataset):
             continue
 
-        # read dataset into numpy array
-        arr = np.array(ds)
+        # read dataset into numpy array (disk -> memory axis order)
+        arr = _disk_to_mem(np.array(ds))
 
         # normalize the variable name via the central alias table
         var_name_normalized = normalize(dataset_name).lower()

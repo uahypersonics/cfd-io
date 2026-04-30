@@ -141,13 +141,16 @@ def test_info_hdf5_root_level_layout_with_attrs(tmp_path: Path) -> None:
     import h5py
 
     h5 = tmp_path / "root_layout.h5"
+    # on-disk HDF5 axis order is Fortran (nk, nj, ni) -- transpose memory
+    # arrays before raw-write so the file matches the convention used by
+    # external producers (Plot3D / Tecplot / CGNS-style writers)
     with h5py.File(h5, "w") as fobj:
         fobj.attrs["mach"] = 6.0
         fobj.attrs["re1"] = 1.0e7
-        fobj.create_dataset("x", data=GRID["x"])
-        fobj.create_dataset("y", data=GRID["y"])
-        fobj.create_dataset("dens", data=FLOW["uvel"])
-        fobj.create_dataset("temp", data=FLOW["pres"])
+        fobj.create_dataset("x", data=GRID["x"].transpose(2, 1, 0))
+        fobj.create_dataset("y", data=GRID["y"].transpose(2, 1, 0))
+        fobj.create_dataset("dens", data=FLOW["uvel"].transpose(2, 1, 0))
+        fobj.create_dataset("temp", data=FLOW["pres"].transpose(2, 1, 0))
 
     info = get_info(h5)
     assert info.format == "hdf5"
