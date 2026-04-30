@@ -4,7 +4,7 @@ I/O toolkit for structured CFD data: read, write, and convert between formats.
 
 [![Test](https://github.com/uahypersonics/cfd-io/actions/workflows/test.yml/badge.svg)](https://github.com/uahypersonics/cfd-io/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/uahypersonics/cfd-io/branch/main/graph/badge.svg)](https://codecov.io/gh/uahypersonics/cfd-io)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18926272.svg)](https://doi.org/10.5281/zenodo.18926272)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18926271.svg)](https://doi.org/10.5281/zenodo.18926271)
 [![PyPI](https://img.shields.io/pypi/v/cfd-io)](https://pypi.org/project/cfd-io/)
 [![Docs](https://img.shields.io/badge/docs-mkdocs-blue)](https://uahypersonics.github.io/cfd-io/)
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](LICENSE)
@@ -67,7 +67,7 @@ Full documentation: https://uahypersonics.github.io/cfd-io
 
 If `cfd-io` contributes to published work, please cite the software release:
 
-- DOI: [10.5281/zenodo.18926272](https://doi.org/10.5281/zenodo.18926272)
+- DOI (concept, always latest): [10.5281/zenodo.18926271](https://doi.org/10.5281/zenodo.18926271)
 
 GitHub also provides machine-readable citation metadata via `CITATION.cff` in this repository.
 
