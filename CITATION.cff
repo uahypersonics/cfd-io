@@ -11,7 +11,7 @@ authors:
 repository-code: "https://github.com/uahypersonics/cfd-io"
 url: "https://uahypersonics.github.io/cfd-io"
 doi: "10.5281/zenodo.18926271"
-license: BSD-3-Clause
+license: GPL-3.0-or-later
 keywords:
   - computational fluid dynamics
   - structured grids

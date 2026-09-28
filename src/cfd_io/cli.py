@@ -5,7 +5,9 @@
 # --------------------------------------------------
 from __future__ import annotations
 
+import json
 import logging
+import re
 from pathlib import Path
 
 import typer
@@ -49,6 +51,92 @@ def _configure_logging(debug: bool) -> None:
     logging.basicConfig(
         level=level,
         format="%(levelname)-8s %(message)s",
+    )
+
+
+# --------------------------------------------------
+# helper: load attributes from a flow_conditions file
+# --------------------------------------------------
+def _load_attrs_from_file(path: Path) -> dict[str, float | str]:
+    """Load attributes from a flow conditions file (.dat legacy or .json).
+
+    .json format: flat {"key": value} dict — values cast to float where possible.
+
+    .dat legacy format: fixed-column lines like
+        ``freestream Mach number, M      :    14.4  [-]``
+    The short name after the last comma is used as the key (lowercased).
+    For lines without a comma short-name the full description is snake_cased.
+    The first numeric token before any ``[units]`` block is used as the value.
+    String-valued lines (e.g. viscosity law name) are stored as strings.
+
+    Args:
+        path: Path to the attribute file (.dat or .json).
+
+    Returns:
+        Dict mapping attribute keys to float or string values.
+    """
+    # validate file exists
+    if not path.exists():
+        raise typer.BadParameter(f"attr-file not found: {path}")
+
+    # read JSON format
+    suffix = path.suffix.lower()
+    if suffix == ".json":
+        with path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        # cast values to float where possible
+        attrs: dict[str, float | str] = {}
+        for k, v in data.items():
+            try:
+                attrs[k] = float(v)
+            except (ValueError, TypeError):
+                attrs[k] = str(v)
+        return attrs
+
+    # read legacy .dat format
+    if suffix == ".dat":
+        attrs = {}
+        with path.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                # skip blank lines and lines without a colon separator
+                if not line or ":" not in line:
+                    continue
+
+                # split on first colon: left = description, right = value + units
+                desc, _, value_part = line.partition(":")
+                desc = desc.strip()
+                value_part = value_part.strip()
+
+                # extract key: last token after last comma in description (the short name)
+                # example: "freestream Mach number, M" -> "m"
+                # example: "Viscosity Option" -> "viscosity_option" (no comma)
+                if "," in desc:
+                    key = desc.rsplit(",", 1)[-1].strip().lower()
+                else:
+                    # snake_case the full description as fallback
+                    key = re.sub(r"[^a-z0-9]+", "_", desc.lower()).strip("_")
+
+                # skip if key is empty
+                if not key:
+                    continue
+
+                # extract numeric value: strip unit block [...]  and dual-value slash
+                # example: "14.4000 [-]"         -> "14.4000"
+                # example: "119161873.55 / 17282.97 [Pa]/[psi]" -> "119161873.55"
+                raw = value_part.split("[")[0].split("/")[0].strip()
+
+                # store as float if numeric, otherwise as a stripped string
+                try:
+                    attrs[key] = float(raw)
+                except ValueError:
+                    attrs[key] = value_part.split("[")[0].strip()
+
+        return attrs
+
+    raise typer.BadParameter(
+        f"unsupported attr-file format '{suffix}' — expected .dat or .json"
     )
 
 
@@ -139,6 +227,11 @@ def convert(
         None, "--attr", "-a",
         help="Metadata as key=value (repeatable, e.g. --attr mach=6.0 --attr re=1e6).",
     ),
+    attr_file: Path | None = typer.Option(
+        None, "--attr-file", "-A",
+        help="Load attributes from a file (.dat legacy or .json). "
+             "Merged with --attr; --attr takes precedence on conflicts.",
+    ),
 ) -> None:
     """Convert CFD data between formats (dispatched by file extension).
 
@@ -156,6 +249,13 @@ def convert(
         # convert and stamp flow-condition attributes
         cfd-io convert flow.q -g grid.x -o base_flow.h5 \\
             --attr mach=6.0 --attr re1=1e7 --attr temp_inf=54.0
+
+        # stamp all attributes from a legacy flow_conditions.dat
+        cfd-io convert flow.q -g grid.x -o base_flow.h5 -A flow_conditions.dat
+
+        # stamp from JSON, override one value on the command line
+        cfd-io convert flow.q -g grid.x -o base_flow.h5 \\
+            -A flow_conditions.json --attr mach=6.0
     """
 
     # set up logging
@@ -164,8 +264,12 @@ def convert(
     # lazy import of converter (deferred to keep CLI startup fast)
     from cfd_io.convert_mod import do_convert
 
-    # parse --attr key=value pairs into a dict
+    # load attributes from file first (lower precedence)
     attrs: dict[str, float | str] = {}
+    if attr_file:
+        attrs.update(_load_attrs_from_file(attr_file))
+
+    # parse --attr key=value pairs (these override any file-loaded attrs)
     if attr:
         for item in attr:
             if "=" not in item:
@@ -195,7 +299,7 @@ def convert(
 def attrs(
     path: Path = typer.Argument(..., help="Path to an HDF5 file (.h5, .hdf5)."),
     attr: list[str] = typer.Option(
-        ...,
+        [],
         "--attr", "-a",
         help="Attribute as key=value (repeatable, e.g. -a mach=6.0 -a re1=1e7). "
              "Numeric values are stored as float; otherwise as string.",
@@ -204,6 +308,11 @@ def attrs(
         [],
         "--delete", "-d",
         help="Attribute key to delete (repeatable).",
+    ),
+    attr_file: Path | None = typer.Option(
+        None, "--attr-file", "-A",
+        help="Load attributes from a file (.dat legacy or .json). "
+             "Merged with --attr; --attr takes precedence on conflicts.",
     ),
     debug: bool = typer.Option(False, "--debug", help="Enable debug logging."),
 ) -> None:
@@ -216,6 +325,12 @@ def attrs(
     Examples:
         # add freestream conditions
         cfd-io attrs base_flow.h5 -a mach=6.0 -a re1=1e7 -a temp_inf=54.0
+
+        # stamp all conditions from a legacy flow_conditions.dat
+        cfd-io attrs base_flow.h5 -A flow_conditions.dat
+
+        # stamp from JSON, override one value
+        cfd-io attrs base_flow.h5 -A flow_conditions.json -a mach=6.0
 
         # update one attribute and delete another
         cfd-io attrs base_flow.h5 -a mach=10.0 -d stale_key
@@ -239,7 +354,10 @@ def attrs(
         )
 
     # parse --attr key=value pairs into a dict, coercing numerics where possible
+    # load attributes from file first (lower precedence), then overlay --attr
     new_attrs: dict[str, float | str] = {}
+    if attr_file:
+        new_attrs.update(_load_attrs_from_file(attr_file))
     for item in attr:
         if "=" not in item:
             raise typer.BadParameter(f"expected key=value, got '{item}'")
@@ -248,6 +366,10 @@ def attrs(
             new_attrs[k] = float(v)
         except ValueError:
             new_attrs[k] = v
+
+    # require at least one attribute source
+    if not new_attrs and not delete:
+        raise typer.BadParameter("provide at least one --attr, --attr-file, or --delete")
 
     # open in read+write mode and patch attributes
     with h5py.File(path, "r+") as fobj:

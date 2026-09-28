@@ -40,6 +40,10 @@ from cfd_io.writers.plot3d import write_plot3d
 from cfd_io.writers.plot3d_grid_ascii import write_plot3d_grid_ascii
 from cfd_io.writers.plot3d_grid_binary import write_plot3d_grid_binary
 from cfd_io.writers.tecplot_ascii import write_tecplot_ascii
+from cfd_io.table import Table
+from cfd_io.readers.csv import read_table_csv
+from cfd_io.writers.csv import write_table_csv
+from cfd_io.writers.tecplot_ascii_table import write_table_tecplot_ascii
 
 __all__ = [
     "BinaryHeader",
@@ -69,6 +73,10 @@ __all__ = [
     "read_plot3d_grid_binary",
     "read_tecplot_ascii",
     "read_vtu",
+    "Table",
+    "read_table_csv",
+    "write_table_csv",
+    "write_table_tecplot_ascii",
     "write_binary_direct",
     "write_file",
     "write_hdf5",

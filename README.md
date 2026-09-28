@@ -7,7 +7,7 @@ I/O toolkit for structured CFD data: read, write, and convert between formats.
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18926271.svg)](https://doi.org/10.5281/zenodo.18926271)
 [![PyPI](https://img.shields.io/pypi/v/cfd-io)](https://pypi.org/project/cfd-io/)
 [![Docs](https://img.shields.io/badge/docs-mkdocs-blue)](https://uahypersonics.github.io/cfd-io/)
-[![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-≥3.11-blue.svg)](https://www.python.org/downloads/)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
@@ -117,4 +117,5 @@ The GitHub Actions workflow will automatically build and publish to PyPI via Tru
 
 ## License
 
-BSD-3-Clause. See [LICENSE](LICENSE) for details.
+GNU General Public License v3.0 or later. See [LICENSE](LICENSE) for the
+complete license terms.
