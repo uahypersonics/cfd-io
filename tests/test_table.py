@@ -5,11 +5,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from cfd_io.table import Table
 from cfd_io.readers.csv import read_table_csv
+from cfd_io.table import Table
 from cfd_io.writers.csv import write_table_csv
 from cfd_io.writers.tecplot_ascii_table import write_table_tecplot_ascii
-
 
 # ======================================================================
 # shared fixtures

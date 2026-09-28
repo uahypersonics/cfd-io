@@ -35,14 +35,14 @@ try:
     from cfd_io.writers.tecplot_binary import write_tecplot_plt
 except ImportError:  # pytecplot not installed
     pass
+from cfd_io.readers.csv import read_table_csv
+from cfd_io.table import Table
+from cfd_io.writers.csv import write_table_csv
 from cfd_io.writers.fortran_binary_direct import write_binary_direct
 from cfd_io.writers.plot3d import write_plot3d
 from cfd_io.writers.plot3d_grid_ascii import write_plot3d_grid_ascii
 from cfd_io.writers.plot3d_grid_binary import write_plot3d_grid_binary
 from cfd_io.writers.tecplot_ascii import write_tecplot_ascii
-from cfd_io.table import Table
-from cfd_io.readers.csv import read_table_csv
-from cfd_io.writers.csv import write_table_csv
 from cfd_io.writers.tecplot_ascii_table import write_table_tecplot_ascii
 
 __all__ = [

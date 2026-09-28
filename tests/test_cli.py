@@ -7,7 +7,6 @@ from typer.testing import CliRunner
 
 from cfd_io.cli import app
 from cfd_io.dataset import Dataset, Field, StructuredGrid
-from cfd_io.readers.fortran_binary_direct import read_header
 from cfd_io.writers.fortran_binary_direct import write_binary_direct
 from cfd_io.writers.hdf5 import write_hdf5
 
