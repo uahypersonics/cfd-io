@@ -29,12 +29,10 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: |
-          pip install "mkdocs>=1.5,<2" mkdocs-material mkdocstrings[python]
-          pip install -e .
+        run: pip install -e ".[docs]"
 
       - name: Build documentation
-        run: mkdocs build --strict
+        run: zensical build --strict
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
