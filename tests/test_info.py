@@ -49,6 +49,7 @@ def _ds(grid, flow=None, attrs=None):
 # split format (.cd / .s8 / .s4)
 # ======================================================================
 
+
 def test_info_cd(tmp_path: Path) -> None:
     """get_info on a .cd file returns split metadata."""
     fpath = tmp_path / "flow.s8"
@@ -99,6 +100,7 @@ def test_info_s8_missing_cd(tmp_path: Path) -> None:
 # ======================================================================
 # HDF5
 # ======================================================================
+
 
 def test_info_hdf5(tmp_path: Path) -> None:
     """get_info on a .h5 file returns hdf5 metadata."""
@@ -167,6 +169,7 @@ def test_info_hdf5_root_level_layout_with_attrs(tmp_path: Path) -> None:
 # Plot3D grid (.x)
 # ======================================================================
 
+
 def test_info_plot3d_grid(tmp_path: Path) -> None:
     """get_info on a .x file returns plot3d grid metadata."""
     xfile = tmp_path / "grid.x"
@@ -183,6 +186,7 @@ def test_info_plot3d_grid(tmp_path: Path) -> None:
 # ======================================================================
 # Plot3D solution (.q) -- uses FortranBinaryWriter to create .q files
 # ======================================================================
+
 
 def _write_q_binary_3d(fpath: Path, grid: dict, flow: dict) -> None:
     """Write a minimal Plot3D .q file (3-D binary, single block)."""
@@ -214,6 +218,7 @@ def test_info_plot3d_flow(tmp_path: Path) -> None:
 # Tecplot ASCII (.dat)
 # ======================================================================
 
+
 def test_info_tecplot_ascii(tmp_path: Path) -> None:
     """get_info on a .dat file returns tecplot metadata."""
     dat = tmp_path / "data.dat"
@@ -229,8 +234,34 @@ def test_info_tecplot_ascii(tmp_path: Path) -> None:
 
 
 # ======================================================================
+# VTK unstructured grid (.vtu)
+# ======================================================================
+
+
+def test_info_vtu(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """get_info on a .vtu file returns reconstructed-grid metadata."""
+    vtu = tmp_path / "flow.vtu"
+    dataset = _ds(GRID, FLOW, attrs={"format": "vtu"})
+
+    # isolate metadata conversion from the raw-binary VTU parser
+    monkeypatch.setattr("cfd_io.convert_mod.read_file", lambda path: dataset)
+
+    info = get_info(vtu)
+    assert info.format == "vtu"
+    assert info.nx == NX
+    assert info.ny == NY
+    assert info.nz == NZ
+    assert info.np == 2
+    assert info.nt == 1
+    assert info.var_names == ["uvel", "pres"]
+    assert info.precision == "float64"
+    assert info.attrs == {"format": "vtu"}
+
+
+# ======================================================================
 # error paths
 # ======================================================================
+
 
 def test_info_unsupported_extension(tmp_path: Path) -> None:
     """get_info raises ValueError for unknown file extension."""

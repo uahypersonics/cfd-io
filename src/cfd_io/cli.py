@@ -165,7 +165,7 @@ def formats() -> None:
 # --------------------------------------------------
 @app.command()
 def info(
-    path: Path = typer.Argument(..., help="Path to a data file (.h5, .cd, .x, .dat)."),
+    path: Path = typer.Argument(..., help="Path to a supported CFD data file."),
 ) -> None:
     """Show metadata summary for a CFD data file.
 
@@ -176,6 +176,9 @@ def info(
 
         # inspect a Plot3D grid file
         cfd-io info grid.x
+
+        # inspect an SU2 VTU base flow
+        cfd-io info flow_data.vtu
     """
 
     # lazy import to keep CLI startup fast

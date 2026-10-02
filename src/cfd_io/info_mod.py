@@ -1,8 +1,9 @@
 """File metadata extraction.
 
 Provides ``FileInfo`` (a dataclass) and ``get_info()`` which returns
-structured metadata for any supported CFD file format without loading
-the full dataset into memory.
+structured metadata for supported CFD file formats. Readers use direct
+metadata access when available and load the dataset when reconstruction
+is required.
 """
 
 # --------------------------------------------------
@@ -89,8 +90,50 @@ def get_info(fpath: str | Path) -> FileInfo:
     elif suffix == ".plt":
         return _info_from_tecplot_binary(fpath)
 
+    # VTK unstructured grid
+    elif suffix == ".vtu":
+        return _info_from_vtu(fpath)
+
     else:
         raise ValueError(f"unsupported file type: {suffix}")
+
+
+# --------------------------------------------------
+# get info from VTU files after structured reconstruction
+# --------------------------------------------------
+def _info_from_vtu(fpath: Path) -> FileInfo:
+    """Extract info from an SU2-style structured VTU file."""
+    from cfd_io.convert_mod import read_file
+    from cfd_io.dataset import StructuredGrid
+
+    # read and reconstruct the logically structured quad grid
+    dataset = read_file(fpath)
+
+    # validate the grid type before extracting structured dimensions
+    if not isinstance(dataset.grid, StructuredGrid):
+        raise ValueError("VTU info requires a structured quad grid")
+
+    nx, ny, nz = dataset.grid.shape
+    var_names = list(dataset.flow)
+
+    # report the flow precision when fields exist, otherwise use grid precision
+    if var_names:
+        first_field = dataset.flow[var_names[0]]
+        precision = str(first_field.data.dtype)
+    else:
+        precision = str(dataset.grid.x.dtype)
+
+    return FileInfo(
+        nx=nx,
+        ny=ny,
+        nz=nz,
+        np=len(var_names),
+        nt=1 if var_names else 0,
+        var_names=var_names,
+        precision=precision,
+        format="vtu",
+        attrs=dict(dataset.attrs),
+    )
 
 
 # --------------------------------------------------
@@ -212,10 +255,7 @@ def _info_from_hdf5(fpath: Path) -> FileInfo:
         else:
             # fallback: flat root-level datasets (x/y/z are coordinates, others are variables)
             coord_names = {"x", "y", "z"}
-            root_datasets = [
-                name for name in fobj
-                if isinstance(fobj[name], h5py.Dataset)
-            ]
+            root_datasets = [name for name in fobj if isinstance(fobj[name], h5py.Dataset)]
             var_names = [name for name in root_datasets if name not in coord_names]
 
             if not precision and root_datasets:
