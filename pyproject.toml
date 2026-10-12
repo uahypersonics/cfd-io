@@ -11,7 +11,7 @@ license = "GPL-3.0-or-later"
 license-files = ["LICENSE"]
 requires-python = ">=3.11"
 authors = [
-    {name = "Christoph Hader", email = "chader@arizona.edu"},
+    {name = "Christoph Hader", email = "christoph.hader@gmail.com"},
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
