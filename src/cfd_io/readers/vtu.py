@@ -37,13 +37,12 @@ logger = logging.getLogger(__name__)
 def _parse_vtu_raw(fpath: Path):
     """Parse a VTU file with raw binary appended data.
 
-    Returns
-    -------
-    points : ndarray, shape (n_points, 3)
-    conn   : ndarray, shape (n_cells, 4)
-    raw_data : dict[str, ndarray]
-        PointData arrays keyed by attribute name.
-    n_points, n_cells : int
+    Returns:
+        tuple: ``(points, conn, raw_data, n_points, n_cells)`` where
+            ``points`` is an ndarray of shape (n_points, 3), ``conn`` is an
+            ndarray of shape (n_cells, 4), ``raw_data`` is a dict of
+            PointData arrays keyed by attribute name, and ``n_points`` and
+            ``n_cells`` are ints.
     """
 
     # Read the entire file as bytes since the binary data is mixed with XML

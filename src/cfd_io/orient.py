@@ -115,11 +115,9 @@ def canonicalize_dataset(ds: Dataset) -> Dataset:
     unchanged because the wall cannot be detected without a velocity
     field.
 
-    Returns
-    -------
-    Dataset
-        A new `Dataset` whose grid and flow arrays are reoriented.  The
-        original dataset is not modified.
+    Returns:
+        Dataset: A new `Dataset` whose grid and flow arrays are reoriented.  The
+            original dataset is not modified.
     """
     # gather velocity components -> required for wall detection
     # canonicalization is only meaningful on a structured grid
