@@ -45,6 +45,8 @@ _READER_REGISTRY: dict[str, str] = {
     ".hdf5": "hdf5",
     ".x": "plot3d",
     ".xyz": "plot3d",
+    ".p2dfmt": "plot3d",
+    ".p3dfmt": "plot3d",
     ".q": "plot3d_flow",
     ".dat": "tecplot",
     ".plt": "tecplot_binary",
@@ -60,9 +62,12 @@ _WRITER_REGISTRY: dict[str, str] = {
     ".hdf5": "hdf5",
     ".x": "plot3d",
     ".xyz": "plot3d",
+    ".p2dfmt": "plot3d_ascii",
+    ".p3dfmt": "plot3d_ascii",
     ".dat": "tecplot",
     ".plt": "tecplot_binary",
     ".su2": "su2",
+    ".msh": "gmsh",
 }
 
 # --------------------------------------------------
@@ -285,6 +290,13 @@ def write_file(
 
         return write_plot3d(fpath, dataset)
 
+    elif fmt == "plot3d_ascii":
+
+        # lazy import of appropriate writer (formatted Plot3D)
+        from cfd_io.writers.plot3d import write_plot3d
+
+        return write_plot3d(fpath, dataset, binary=False)
+
     elif fmt == "tecplot":
 
         # lazy import of appropriate writer
@@ -306,6 +318,13 @@ def write_file(
         from cfd_io.writers.su2 import write_su2
 
         return write_su2(fpath, dataset)
+
+    elif fmt == "gmsh":
+
+        # lazy import of appropriate writer (first-order quads; call write_gmsh for order 2)
+        from cfd_io.writers.gmsh import write_gmsh
+
+        return write_gmsh(fpath, dataset)
 
     else:
         raise ValueError(f"unsupported format: {fmt}")

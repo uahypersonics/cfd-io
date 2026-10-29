@@ -17,7 +17,7 @@ Reads the grouped timestep layout produced by
     /flow/00001/uvel     (nk, nj, ni)
     /flow/00001/vvel     ...
     /flow/00002/uvel     ...
-    root attrs:          mach, re1, temp_inf, ...
+    root attrs:          mach, re1, temp_inf, ... (JSON objects -> dicts)
 
 Also supports two legacy layouts:
 
@@ -32,6 +32,7 @@ Also supports two legacy layouts:
 # --------------------------------------------------
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -117,7 +118,8 @@ def read_hdf5(
 
         - **grid** -- ``{"x": ndarray, ...}``
         - **flow** -- flat dict (single ts) or ``{int: dict}`` (multi ts)
-        - **attrs** -- scalar metadata from root attributes, plus
+        - **attrs** -- metadata from root attributes (JSON-object text
+            written by ``write_hdf5`` comes back as a dict), plus
             ``"timesteps"`` listing available timestep indices when the
             file contains timestep groups
 
@@ -179,7 +181,7 @@ def read_hdf5(
 
         # read root attributes into attrs dict
         for key, val in fobj.attrs.items():
-            attrs[key] = val
+            attrs[key] = _decode_attr(val)
             logger.debug("  attr %s = %s", key, val)
 
         # add timestep index list when timestep groups are present
@@ -426,3 +428,33 @@ def _read_flat_root(
 
     # return grid and flow dicts
     return grid, flow
+
+
+# turn JSON-object text written by write_hdf5 back into a dict
+def _decode_attr(value: Any) -> Any:
+    """Return a dict for a string attribute holding a JSON object, else the value.
+
+    ``write_hdf5`` stores dict attributes (e.g. ``markers``) as JSON text,
+    since HDF5 attributes can't hold nested mappings.
+
+    Args:
+        value: Attribute value as read by h5py.
+
+    Returns:
+        The decoded dict, or *value* unchanged.
+    """
+
+    # only strings that look like a JSON object are candidates
+    if not isinstance(value, str) or not value.startswith("{"):
+        return value
+
+    # decode; text that merely starts with "{" stays a string
+    try:
+        decoded = json.loads(value)
+    except json.JSONDecodeError:
+        return value
+
+    if not isinstance(decoded, dict):
+        return value
+
+    return decoded

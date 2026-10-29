@@ -108,4 +108,3 @@ nav:
     - get_info / FileInfo: api/info.md
     - Readers: api/readers.md
     - Writers: api/writers.md
-  - Supported Formats: formats.md

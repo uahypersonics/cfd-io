@@ -14,7 +14,7 @@ The writer transposes on write::
     /flow/00001/uvel     memory (ni, nj, nk) -> disk (nk, nj, ni) float32
     /flow/00001/vvel     ...
     /flow/00002/uvel     ...
-    root attrs:          mach, re1, temp_inf, ...
+    root attrs:          mach, re1, temp_inf, ... (dict values as JSON text)
     /flow/00001 attrs:   iteration, solution_time (if supplied)
 
 Single-timestep data is stored under ``/flow/00001/``.
@@ -25,8 +25,10 @@ Single-timestep data is stored under ``/flow/00001/``.
 # --------------------------------------------------
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
+from typing import Any
 
 import h5py
 import numpy as np
@@ -116,46 +118,56 @@ def write_hdf5(
         fpath, len(grid), n_ts,
     )
 
-    # open the HDF5 file and write grid, flow, and attributes
-    with h5py.File(fpath, "w") as fobj:
+    # encode attributes before opening the file, so a bad value leaves no file behind
+    encoded_attrs = _encode_attrs(attrs)
 
-        # -- /grid group (written once) --------------------------------
-        grid_grp = fobj.create_group("grid")
-        # enforce x, y, z ordering for grid variables
-        ordered_keys = [k for k in ("x", "y", "z") if k in grid]
-        ordered_keys += [k for k in grid if k not in ordered_keys]
-        for name in ordered_keys:
-            # transpose from memory (ni, nj, nk) to disk (nk, nj, ni) before write
-            grid_grp.create_dataset(name, data=_mem_to_disk(grid[name]), dtype=dtype)
+    try:
+        # open the HDF5 file and write grid, flow, and attributes
+        with h5py.File(fpath, "w") as fobj:
 
-        # -- /flow/<NNNNN>/ groups -------------------------------------
-        flow_grp = fobj.create_group("flow")
-
-        # write each timestep as a numbered subgroup (e.g. /flow/00001/)
-        for ts_key in sorted(timestep_flow):
-            ts_dict = timestep_flow[ts_key]
-            ts_name = f"{ts_key:05d}"
-            ts_grp = flow_grp.create_group(ts_name)
-
-            # write each flow variable as a dataset in the timestep group
-            for name, data in ts_dict.items():
-                # skip metadata keys
-                if name.startswith("_"):
-                    continue
+            # -- /grid group (written once) --------------------------------
+            grid_grp = fobj.create_group("grid")
+            # enforce x, y, z ordering for grid variables
+            ordered_keys = [k for k in ("x", "y", "z") if k in grid]
+            ordered_keys += [k for k in grid if k not in ordered_keys]
+            for name in ordered_keys:
                 # transpose from memory (ni, nj, nk) to disk (nk, nj, ni) before write
-                ts_grp.create_dataset(name, data=_mem_to_disk(data), dtype=dtype)
+                grid_grp.create_dataset(name, data=_mem_to_disk(grid[name]), dtype=dtype)
 
-            # per-timestep attributes
-            if "_iteration" in ts_dict:
-                ts_grp.attrs["iteration"] = ts_dict["_iteration"]
-            if "_solution_time" in ts_dict:
-                ts_grp.attrs["solution_time"] = ts_dict["_solution_time"]
+            # -- /flow/<NNNNN>/ groups -------------------------------------
+            flow_grp = fobj.create_group("flow")
 
-        # -- root attributes -------------------------------------------
-        if attrs:
-            for k, v in attrs.items():
-                if v is not None:
+            # write each timestep as a numbered subgroup (e.g. /flow/00001/)
+            for ts_key in sorted(timestep_flow):
+                ts_dict = timestep_flow[ts_key]
+                ts_name = f"{ts_key:05d}"
+                ts_grp = flow_grp.create_group(ts_name)
+
+                # write each flow variable as a dataset in the timestep group
+                for name, data in ts_dict.items():
+                    # skip metadata keys
+                    if name.startswith("_"):
+                        continue
+                    # transpose from memory (ni, nj, nk) to disk (nk, nj, ni) before write
+                    ts_grp.create_dataset(name, data=_mem_to_disk(data), dtype=dtype)
+
+                # per-timestep attributes
+                if "_iteration" in ts_dict:
+                    ts_grp.attrs["iteration"] = ts_dict["_iteration"]
+                if "_solution_time" in ts_dict:
+                    ts_grp.attrs["solution_time"] = ts_dict["_solution_time"]
+
+            # -- root attributes -------------------------------------------
+            for k, v in encoded_attrs.items():
+                # name the attribute when HDF5 can't store its type
+                try:
                     fobj.attrs[k] = v
+                except TypeError as error:
+                    raise TypeError(f"can't write attribute {k!r} to HDF5: {error}") from error
+    except Exception:
+        # remove the partly written file, then report the original error
+        fpath.unlink(missing_ok=True)
+        raise
 
     logger.info("wrote %s  (%d timestep(s))", fpath, n_ts)
     return fpath
@@ -193,3 +205,43 @@ def _normalise_flow(
 
     # already multi-timestep
     return flow
+
+
+# encode attribute values HDF5 can't store natively
+def _encode_attrs(attrs: dict[str, Any]) -> dict[str, Any]:
+    """Prepare root attributes for HDF5: drop ``None``, store dicts as JSON text.
+
+    HDF5 attributes hold scalars, strings and arrays, but no nested
+    mappings. Dict values (e.g. ``markers`` with the boundary names) are
+    written as JSON text; ``read_hdf5`` turns them back into dicts.
+
+    Args:
+        attrs: Root attributes of the dataset.
+
+    Returns:
+        Attributes ready to write.
+
+    Raises:
+        TypeError: If a dict value can't be encoded as JSON.
+    """
+
+    # default: empty
+    encoded_attrs: dict[str, Any] = {}
+
+    for key, value in attrs.items():
+        # None means "not set": skip
+        if value is None:
+            continue
+
+        # nested mapping: JSON text
+        if isinstance(value, dict):
+            try:
+                encoded_attrs[key] = json.dumps(value)
+            except TypeError as error:
+                raise TypeError(f"can't write attribute {key!r} to HDF5: {error}") from error
+            continue
+
+        # everything else as is
+        encoded_attrs[key] = value
+
+    return encoded_attrs

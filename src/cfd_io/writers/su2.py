@@ -42,7 +42,13 @@ from pathlib import Path
 
 import numpy as np
 
-from cfd_io.dataset import StructuredGrid, UnstructuredGrid
+from cfd_io.dataset import Dataset, StructuredGrid, UnstructuredGrid
+from cfd_io.writers._markers import (
+    _SIDES_FOR_AXIS,
+    _extract_markers,
+    _required_sides,
+    _validate_markers,
+)
 
 # --------------------------------------------------
 # set up logger
@@ -58,15 +64,6 @@ _SU2_QUAD = 9
 _SU2_HEX = 12
 
 # --------------------------------------------------
-# Canonical side ordering
-# --------------------------------------------------
-_SIDES_FOR_AXIS = {
-    0: ("imin", "imax"),
-    1: ("jmin", "jmax"),
-    2: ("kmin", "kmax"),
-}
-
-# --------------------------------------------------
 # Coordinate format (decided once, used everywhere)
 # --------------------------------------------------
 _COORD_FMT = "%.15e"
@@ -78,73 +75,6 @@ _COORD_FMT = "%.15e"
 def _get_active_axes(shape: tuple[int, ...]) -> list[int]:
     """Return indices of axes with size > 1."""
     return [a for a in range(len(shape)) if shape[a] > 1]
-
-
-# --------------------------------------------------
-# helper function to validate markers and merge boundary elements by marker tag
-# --------------------------------------------------
-def _required_sides(active_axes: list[int]) -> list[str]:
-    """Required marker side names in canonical order for *active_axes*."""
-    sides: list[str] = []
-    for ax in sorted(active_axes):
-        lo, hi = _SIDES_FOR_AXIS[ax]
-        sides.append(lo)
-        sides.append(hi)
-    return sides
-
-
-# --------------------------------------------------
-# helper function to validate that all required marker keys are present in the markers dict
-# --------------------------------------------------
-def _validate_markers(markers: dict, required: list[str]) -> None:
-    """Check that *markers* contains every key in *required*.
-
-    Raises:
-        ValueError: If any required key is missing.
-    """
-    missing = [s for s in required if s not in markers]
-    if missing:
-        raise ValueError(
-            f"missing required marker keys: {missing}; "
-            f"required for this dimensionality: {required}"
-        )
-
-
-# --------------------------------------------------
-# helper function to extract and validate markers from dataset.attrs
-# --------------------------------------------------
-def _extract_markers(attrs: dict, required: list[str]) -> dict[str, str]:
-    """Extract ``attrs["markers"]["structured"]``.
-
-    Raises:
-        TypeError: ``markers`` is missing or malformed.
-    """
-    if "markers" not in attrs:
-        example = {s: s for s in required}
-        raise TypeError(
-            "dataset.attrs is missing 'markers'; SU2 writer requires "
-            "boundary tag names. Provide them as e.g.\n"
-            f"    dataset.attrs['markers'] = {{'structured': {example}}}\n"
-            "where each value is the SU2 MARKER_TAG string for that side."
-        )
-    markers_top = attrs["markers"]
-    if not isinstance(markers_top, dict):
-        raise TypeError(
-            f"attrs['markers'] must be a dict, "
-            f"got {type(markers_top).__name__}"
-        )
-    if "structured" not in markers_top:
-        raise TypeError(
-            "attrs['markers'] must contain a 'structured' key "
-            "for structured grids"
-        )
-    structured = markers_top["structured"]
-    if not isinstance(structured, dict):
-        raise TypeError(
-            f"attrs['markers']['structured'] must be a dict, "
-            f"got {type(structured).__name__}"
-        )
-    return structured
 
 
 # --------------------------------------------------
@@ -517,7 +447,7 @@ def _write_su2_text(
 # --------------------------------------------------
 # public api: SU2 mesh writer
 # --------------------------------------------------
-def write_su2(fpath: str | Path, dataset) -> Path:
+def write_su2(fpath: str | Path, dataset: Dataset) -> Path:
     """Write a ``Dataset`` to an SU2 mesh (``.su2``) file.
 
     Args:

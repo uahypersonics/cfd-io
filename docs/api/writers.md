@@ -19,3 +19,11 @@
 ## Binary Direct (split format)
 
 ::: cfd_io.writers.fortran_binary_direct.write_binary_direct
+
+## SU2
+
+::: cfd_io.writers.su2.write_su2
+
+## Gmsh
+
+::: cfd_io.writers.gmsh.write_gmsh

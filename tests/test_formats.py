@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-from cfd_io.convert_mod import do_convert, read_file
+from cfd_io.convert_mod import do_convert, read_file, write_file
 from cfd_io.dataset import Dataset, Field, StructuredGrid
 from cfd_io.readers.fortran_binary_direct import read_binary_direct
 from cfd_io.readers.plot3d import read_plot3d
@@ -416,3 +416,52 @@ def test_read_file_q_extension(tmp_path: Path) -> None:
 
     assert "dens" in ds.flow and "energy" in ds.flow
     assert ds.attrs["mach"] == _MACH
+
+
+# ======================================================================
+# Formatted Plot3D (.p2dfmt)
+# ======================================================================
+def _parse_formatted_plot3d_2d(path: Path) -> tuple[np.ndarray, np.ndarray]:
+    """Parse a 2-D formatted Plot3D file with a minimal, independent reader.
+
+    A first line with one integer is a block count, then one 'ni nj' line per
+    block; then all x (i fastest), all y, read until the first empty line.
+    """
+
+    # header
+    lines = path.read_text().splitlines()
+    tokens = lines[0].split()
+    if len(tokens) > 1:
+        ni, nj = int(tokens[0]), int(tokens[1])
+        body = lines[1:]
+    else:
+        ni, nj = (int(t) for t in lines[1].split()[:2])
+        body = lines[1 + int(tokens[0]):]
+
+    # coordinates
+    coords = []
+    for line in body:
+        if not line.strip():
+            break
+        coords += [float(t) for t in line.split()]
+    n_points = ni * nj
+    x = np.array(coords[:n_points]).reshape(nj, ni).T
+    y = np.array(coords[n_points : 2 * n_points]).reshape(nj, ni).T
+
+    return x, y
+
+
+def test_p2dfmt_writes_formatted_plot3d(tmp_path: Path) -> None:
+    """write_file(*.p2dfmt) writes formatted Plot3D; a minimal reader recovers the grid."""
+
+    # write
+    path = tmp_path / "grid.p2dfmt"
+    dataset = _ds(GRID_2D)
+    write_file(path, dataset)
+
+    # check: the minimal reader, and cfd-io's own reader
+    x, y = _parse_formatted_plot3d_2d(path)
+    np.testing.assert_allclose(x, GRID_2D["x"][:, :, 0], rtol=1e-11)
+    np.testing.assert_allclose(y, GRID_2D["y"][:, :, 0], rtol=1e-11)
+    read_back = read_file(path)
+    np.testing.assert_allclose(np.squeeze(read_back.grid.x), GRID_2D["x"][:, :, 0], rtol=1e-11)
