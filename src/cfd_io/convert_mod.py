@@ -26,7 +26,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from cfd_io.dataset import Dataset
+from cfd_io.dataset import Dataset, StructuredGrid
 
 # --------------------------------------------------
 # set up logger
@@ -379,6 +379,14 @@ def do_convert(
         grid_file=input_grid,
         it=it,
     )
+
+    # check: a grid of a single point means the reader didn't find the grid's
+    # dimensions; writing it would hide that the data is gone
+    if isinstance(ds.grid, StructuredGrid) and ds.grid.x.size == 1:
+        raise ValueError(
+            f"{input_path} was read as a single grid point; the reader didn't find "
+            "the grid's dimensions, so nothing was written"
+        )
 
     # merge: file attrs as base, caller overrides on top
     if attrs:

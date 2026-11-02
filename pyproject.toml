@@ -46,7 +46,7 @@ docs = [
 ]
 
 [project.scripts]
-cfd-io = "cfd_io.cli:app"
+cfd-io = "cfd_io.cli.app:app"
 
 [project.urls]
 Homepage = "https://github.com/uahypersonics/cfd-io"

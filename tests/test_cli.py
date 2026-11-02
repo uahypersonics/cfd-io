@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 from typer.testing import CliRunner
 
-from cfd_io.cli import app
+from cfd_io.cli.app import app
 from cfd_io.dataset import Dataset, Field, StructuredGrid
 from cfd_io.writers.fortran_binary_direct import write_binary_direct
 from cfd_io.writers.hdf5 import write_hdf5
@@ -125,18 +125,30 @@ def test_cli_convert_with_attrs(tmp_path: Path) -> None:
     assert out.exists()
 
 
-def test_cli_convert_with_debug(tmp_path: Path) -> None:
-    """CLI 'convert' with --debug flag."""
+def test_cli_convert_with_verbose(tmp_path: Path) -> None:
+    """CLI 'convert' with the global --verbose (-v) flag."""
     h5 = tmp_path / "data.h5"
     write_hdf5(h5, _ds(GRID, FLOW))
 
     out = tmp_path / "out.h5"
     result = runner.invoke(app, [
+        "-v",
         "convert", str(h5),
         "-o", str(out),
-        "--debug",
     ])
     assert result.exit_code == 0
+    assert out.exists()
+
+
+def test_cli_version_and_verbose_flags_differ() -> None:
+    """-V prints the version; -v is verbose output, not the version."""
+    version_result = runner.invoke(app, ["-V"])
+    assert version_result.exit_code == 0
+    assert version_result.output.startswith("cfd-io ")
+
+    verbose_result = runner.invoke(app, ["-v", "formats"])
+    assert verbose_result.exit_code == 0
+    assert "Readers:" in verbose_result.output
 
 
 # ======================================================================
