@@ -19,6 +19,11 @@ Reads the grouped timestep layout produced by
     /flow/00002/uvel     ...
     root attrs:          mach, re1, temp_inf, ... (JSON objects -> dicts)
 
+A flow array with the grid's shape is a field at the grid points (association
+"node"); one with one point fewer in each grid direction (a 2D grid's third axis
+stays 1) is a field at the cell centres (association "cell"), e.g. the cell values
+of a finite-volume solution on its vertex grid.
+
 Also supports two legacy layouts:
 
 1. **Flat flow group** -- ``/flow/uvel`` (no timestep subgroups).
@@ -230,9 +235,20 @@ def read_hdf5(
     x = grid.get("x", np.array([[[0.0]]]))
     y = grid.get("y", np.array([[[0.0]]]))
 
+    # each field's location: at the grid points, or at the cell centres (one point
+    # fewer in each grid direction)
+    node_shape = x.shape
+    cell_shape = tuple(max(n - 1, 1) for n in node_shape)
+    fields: dict[str, Field] = {}
+    for name, values in flat_flow.items():
+        association = "node"
+        if values.shape == cell_shape and values.shape != node_shape:
+            association = "cell"
+        fields[name] = Field(values, association=association)
+
     return Dataset(
         grid=StructuredGrid(x, y, z),
-        flow={k: Field(v) for k, v in flat_flow.items()},
+        flow=fields,
         attrs=attrs,
     )
 

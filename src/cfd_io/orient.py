@@ -183,7 +183,8 @@ def canonicalize_dataset(ds: Dataset) -> Dataset:
     # transform every flow field
     new_flow: dict[str, Field] = {}
     for name, fld in ds.flow.items():
-        new_flow[name] = Field(_transform(np.asarray(fld.data)))
+        # (a field keeps its location: grid points or cell centres)
+        new_flow[name] = Field(_transform(np.asarray(fld.data)), association=fld.association)
 
     # build a temporary dataset to compute the i-direction streamwise check
     # using the *transformed* uvel / vvel
@@ -220,7 +221,10 @@ def canonicalize_dataset(ds: Dataset) -> Dataset:
             new_y = np.ascontiguousarray(_flip_axis(new_y, axis=0))
             new_z = np.ascontiguousarray(_flip_axis(new_z, axis=0))
             new_flow = {
-                name: Field(np.ascontiguousarray(_flip_axis(np.asarray(fld.data), axis=0)))
+                name: Field(
+                    np.ascontiguousarray(_flip_axis(np.asarray(fld.data), axis=0)),
+                    association=fld.association,
+                )
                 for name, fld in new_flow.items()
             }
 
@@ -237,7 +241,7 @@ def canonicalize_dataset(ds: Dataset) -> Dataset:
     new_y = _ensure_3d(new_y)
     new_z = _ensure_3d(new_z)
     new_flow = {
-        name: Field(_ensure_3d(np.asarray(fld.data)))
+        name: Field(_ensure_3d(np.asarray(fld.data)), association=fld.association)
         for name, fld in new_flow.items()
     }
 
