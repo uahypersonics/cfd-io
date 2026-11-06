@@ -2,14 +2,15 @@
 
 Writes structured-grid Tecplot ASCII files in POINT data packing.
 2-D and 3-D grids are supported.  Grid-only output (no flow variables)
-is allowed.
+is allowed.  Values are written with 17 significant digits, so a float64
+reads back exactly (a grid's wall spacing can be 1e-7 of its coordinates).
 
 Output format::
 
     TITLE = "cfd-io"
     VARIABLES = "x", "y", "uvel", "vvel"
     ZONE T="Zone 1", I=100, J=50, K=1, F=POINT
-    0.000000E+00  0.000000E+00  1.000000E+00  0.000000E+00
+     0.0000000000000000E+00   0.0000000000000000E+00   1.0000000000000000E+00 ...
     ...
 """
 
@@ -125,9 +126,10 @@ def write_tecplot_ascii(
         for arr in all_arrays:
             flat_arrays.append(arr.ravel(order="F"))
 
-        # write data: one line per grid point, all variables on one line
+        # write data: one line per grid point, all variables on one line; 17 significant
+        # digits (16 after the point) read back to the same float64
         for p in range(n_points):
-            vals = " ".join(f"{flat_arrays[v][p]:16.8E}" for v in range(n_vars))
+            vals = " ".join(f"{flat_arrays[v][p]:24.16E}" for v in range(n_vars))
             fobj.write(vals + "\n")
 
     logger.info(

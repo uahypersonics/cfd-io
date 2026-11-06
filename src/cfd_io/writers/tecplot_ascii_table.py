@@ -9,7 +9,7 @@ Output format::
     TITLE = "cfd-io"
     VARIABLES = "eta", "fp", "g_cf", "tau"
     ZONE T="Zone 1", I=500, J=1, K=1, F=POINT
-     0.00000000E+00  0.00000000E+00  0.00000000E+00  1.67614432E+00
+     0.0000000000000000E+00   0.0000000000000000E+00   1.6761443200000000E+00 ...
     ...
 
 Note: this writer handles `Table` only.  For structured CFD grid +
@@ -87,10 +87,11 @@ def write_table_tecplot_ascii(
         # write ZONE line: 1-D ordered zone
         fobj.write(f'ZONE T="{zone_title}", I={n_rows}, J=1, K=1, F=POINT\n')
 
-        # write data rows: one row per table entry, all columns on one line
+        # write data rows: one row per table entry, all columns on one line; 17 significant
+        # digits (16 after the point) read back to the same float64
         arrays = [table.columns[name] for name in names]
         for row_idx in range(n_rows):
-            vals = " ".join(f"{arrays[col_idx][row_idx]:16.8E}" for col_idx in range(n_cols))
+            vals = " ".join(f"{arrays[col_idx][row_idx]:24.16E}" for col_idx in range(n_cols))
             fobj.write(vals + "\n")
 
     logger.info(

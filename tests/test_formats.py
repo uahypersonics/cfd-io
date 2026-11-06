@@ -98,15 +98,17 @@ def test_plot3d_ascii_2d_roundtrip(tmp_path: Path) -> None:
 # ======================================================================
 
 def test_tecplot_ascii_point_3d_roundtrip(tmp_path: Path) -> None:
-    """3-D Tecplot ASCII POINT-format round-trip."""
+    """3-D Tecplot ASCII POINT-format round-trip, exact for float64."""
     p = tmp_path / "data.dat"
     write_tecplot_ascii(p, _ds(GRID_3D, FLOW), title="test3d")
     ds = read_tecplot_ascii(p)
 
-    assert np.allclose(ds.grid.x, GRID_3D["x"], atol=1e-6)
+    # check: the same float64 values, bit for bit (17 significant digits written)
+    np.testing.assert_array_equal(ds.grid.x, GRID_3D["x"])
+    np.testing.assert_array_equal(ds.grid.y, GRID_3D["y"])
     assert "uvel" in ds.flow and "pres" in ds.flow
     assert ds.attrs.get("title") == "test3d"
-    assert np.allclose(ds.flow["uvel"].data, FLOW["uvel"], atol=1e-6)
+    np.testing.assert_array_equal(ds.flow["uvel"].data, FLOW["uvel"])
 
 
 def test_tecplot_ascii_2d_roundtrip(tmp_path: Path) -> None:
