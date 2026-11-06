@@ -9,6 +9,15 @@ are specified via ``dataset.attrs["markers"]["structured"]``, which maps
 logical side names (``imin``, ``imax``, ``jmin``, ``jmax``,
 ``kmin``, ``kmax``) to SU2 marker tag strings.
 
+**Axis** (3-D) — a grid revolved about an axis, with its face ``i = 0`` on
+the axis (each k-line of it collapsed to a point), gets one node per
+collapsed line, prisms for the cells touching the axis, and triangles for
+the boundary faces touching it.  The face ``i = 0`` has no area and no
+marker in the file: the axis is an edge inside the mesh (see
+``cfd_io.writers._volume_mesh``).  A left-handed 3-D grid is written with
+k reversed (``kmin`` and ``kmax`` swap planes, keeping their names on the
+same faces); a folded one is refused.
+
 **Marker policy** — strict by default:
 
 - 2-D requires all 4 perimeter sides for the active axes.
@@ -49,6 +58,7 @@ from cfd_io.writers._markers import (
     _required_sides,
     _validate_markers,
 )
+from cfd_io.writers._volume_mesh import SIDES_3D, build_volume_mesh
 
 # --------------------------------------------------
 # set up logger
@@ -60,8 +70,15 @@ logger = logging.getLogger(__name__)
 # https://su2code.github.io/docs_v7/Mesh-File/
 # --------------------------------------------------
 _SU2_LINE = 3
+_SU2_TRIANGLE = 5
 _SU2_QUAD = 9
 _SU2_HEX = 12
+_SU2_PRISM = 13
+
+# SU2 prisms follow VTK's wedge, whose first triangle faces away from the second;
+# Gmsh's (the volume mesh's order) faces toward it: swap the second and third nodes
+# of both triangles
+_VTK_PRISM_ORDER = [0, 2, 1, 3, 5, 4]
 
 # --------------------------------------------------
 # Coordinate format (decided once, used everywhere)
@@ -81,32 +98,35 @@ def _get_active_axes(shape: tuple[int, ...]) -> list[int]:
 # helper function to merge boundary elements by marker tag
 # --------------------------------------------------
 def _merge_boundaries(
-    boundary_raw: dict[str, np.ndarray],
+    boundary_raw: dict[str, dict[int, np.ndarray]],
     markers: dict[str, str],
     canonical_order: list[str],
-) -> dict[str, np.ndarray]:
-    """Group boundary arrays by marker tag name.
+) -> dict[str, dict[int, np.ndarray]]:
+    """Group boundary element blocks by marker tag name.
 
     Iterates *canonical_order*, maps each side to its tag via *markers*,
-    and concatenates arrays that share the same tag.  The returned dict
-    preserves first-seen order.
+    and concatenates the blocks of one element type that share the same
+    tag.  The returned dict preserves first-seen order, of tags and of
+    element types within a tag.
     """
-    groups: dict[str, list[np.ndarray]] = {}
-    ordered_names: list[str] = []
+    groups: dict[str, dict[int, list[np.ndarray]]] = {}
 
     for side in canonical_order:
         if side not in boundary_raw:
             continue
         tag = markers[side]
         if tag not in groups:
-            groups[tag] = []
-            ordered_names.append(tag)
-        groups[tag].append(boundary_raw[side])
+            groups[tag] = {}
+        for etype, nodes in boundary_raw[side].items():
+            if etype not in groups[tag]:
+                groups[tag][etype] = []
+            groups[tag][etype].append(nodes)
 
-    result: dict[str, np.ndarray] = {}
-    for name in ordered_names:
-        arrs = groups[name]
-        result[name] = arrs[0] if len(arrs) == 1 else np.concatenate(arrs, axis=0)
+    result: dict[str, dict[int, np.ndarray]] = {}
+    for name, blocks in groups.items():
+        result[name] = {}
+        for etype, arrs in blocks.items():
+            result[name][etype] = arrs[0] if len(arrs) == 1 else np.concatenate(arrs, axis=0)
     return result
 
 
@@ -116,7 +136,7 @@ def _merge_boundaries(
 def structured_to_unstructured(
     grid,
     markers: dict[str, str],
-) -> tuple[np.ndarray, np.ndarray, dict[str, np.ndarray]]:
+) -> tuple[np.ndarray, dict[int, np.ndarray], dict[str, dict[int, np.ndarray]]]:
     """Convert a structured grid to an unstructured representation.
 
     Args:
@@ -129,17 +149,19 @@ def structured_to_unstructured(
 
         - *points*: ``(npoints, ndime)`` — coordinate array.
           Columns are ``(x, y)`` for 2-D, ``(x, y, z)`` for 3-D.
-        - *elements*: ``(nelem, nodes_per_elem)`` — element connectivity
-          (area cells in 2-D, volume cells in 3-D).
-          4 columns (quad) for 2-D, 8 columns (hex) for 3-D.
-        - *boundary_elements*: ``dict[str, ndarray]`` — boundary element
-          arrays keyed by SU2 marker tag.  ``(n_belem, 2)`` for 2-D
-          line segments, ``(n_belem, 4)`` for 3-D quad faces.
+        - *elements*: ``dict[int, ndarray]`` — element connectivity
+          (area cells in 2-D, volume cells in 3-D) keyed by SU2 element
+          type: quads (9) in 2-D; hexes (12) in 3-D, plus prisms (13) at
+          an axis.
+        - *boundary_elements*: ``dict[str, dict[int, ndarray]]`` —
+          boundary element blocks keyed by SU2 marker tag, then by SU2
+          element type: line segments (3) in 2-D; quad faces (9) in 3-D,
+          plus triangles (5) touching an axis.
 
     Raises:
         TypeError: If *grid* is not a ``StructuredGrid``.
-        ValueError: If dimensionality is unsupported, grid is too small,
-            or markers are incomplete.
+        ValueError: If dimensionality is unsupported, grid is too small
+            or folded (3-D), or markers are incomplete.
     """
 
     if not isinstance(grid, StructuredGrid):
@@ -182,7 +204,7 @@ def _structured_to_unstructured_2d(
     grid,
     markers: dict[str, str],
     active_axes: list[int],
-) -> tuple[np.ndarray, np.ndarray, dict[str, np.ndarray]]:
+) -> tuple[np.ndarray, dict[int, np.ndarray], dict[str, dict[int, np.ndarray]]]:
     """2-D: quads + line boundary segments."""
     shape = grid.shape
     coords_3d = [grid.x, grid.y, grid.z]
@@ -251,9 +273,15 @@ def _structured_to_unstructured_2d(
 
     # ── Merge by marker name ─────────────────────────────────────────
     canonical = _required_sides(active_axes)
-    boundary_elements = _merge_boundaries(boundary_raw, markers, canonical)
+    boundary_blocks = {}
+    for side, lines in boundary_raw.items():
+        boundary_blocks[side] = {_SU2_LINE: lines}
+    boundary_elements = _merge_boundaries(boundary_blocks, markers, canonical)
 
-    return points, elements, boundary_elements
+    # one element type in 2-D
+    element_blocks = {_SU2_QUAD: elements}
+
+    return points, element_blocks, boundary_elements
 
 
 # --------------------------------------------------
@@ -262,88 +290,46 @@ def _structured_to_unstructured_2d(
 def _structured_to_unstructured_3d(
     grid,
     markers: dict[str, str],
-) -> tuple[np.ndarray, np.ndarray, dict[str, np.ndarray]]:
-    """3-D: hexes + quad face boundaries."""
-    ni, nj, nk = grid.shape
+) -> tuple[np.ndarray, dict[int, np.ndarray], dict[str, dict[int, np.ndarray]]]:
+    """3-D: hexes (prisms at an axis) + quad (and triangle) face boundaries."""
 
-    def nid(i, j, k):
-        return i + ni * j + ni * nj * k
+    # build the volume mesh (merges an axis, orients the cells right-handed)
+    mesh = build_volume_mesh(grid, order=1)
 
-    # ── Points ───────────────────────────────────────────────────────
-    points = np.column_stack([
-        grid.x.ravel(order="F"),
-        grid.y.ravel(order="F"),
-        grid.z.ravel(order="F"),
-    ])
+    # volume elements: hexes, then the prisms at an axis in VTK's order
+    elements = {_SU2_HEX: mesh.hexahedra}
+    if mesh.prisms.shape[0] > 0:
+        elements[_SU2_PRISM] = mesh.prisms[:, _VTK_PRISM_ORDER]
 
-    # ── Volume elements (hexes, SU2-native ordering) ─────────────────
-    ii, jj, kk = np.meshgrid(
-        np.arange(ni - 1), np.arange(nj - 1), np.arange(nk - 1),
-        indexing="ij",
-    )
-    ii, jj, kk = ii.ravel(), jj.ravel(), kk.ravel()
+    # side names: with k reversed, the kmin faces lie on the grid's last k-plane
+    side_names = dict(markers)
+    if mesh.k_reversed:
+        side_names["kmin"] = markers["kmax"]
+        side_names["kmax"] = markers["kmin"]
 
-    elements = np.column_stack([
-        nid(ii,     jj,     kk),        # 0
-        nid(ii + 1, jj,     kk),        # 1
-        nid(ii + 1, jj + 1, kk),        # 2
-        nid(ii,     jj + 1, kk),        # 3
-        nid(ii,     jj,     kk + 1),    # 4
-        nid(ii + 1, jj,     kk + 1),    # 5
-        nid(ii + 1, jj + 1, kk + 1),    # 6
-        nid(ii,     jj + 1, kk + 1),    # 7
-    ])
+    # boundary faces per side; the side on an axis has none and is left out
+    boundary_raw: dict[str, dict[int, np.ndarray]] = {}
+    for side in SIDES_3D:
+        faces = mesh.faces[side]
+        blocks = {}
+        if faces["quadrilateral"].shape[0] > 0:
+            blocks[_SU2_QUAD] = faces["quadrilateral"]
+        if faces["triangle"].shape[0] > 0:
+            blocks[_SU2_TRIANGLE] = faces["triangle"]
+        if blocks:
+            boundary_raw[side] = blocks
 
-    # ── Boundary faces (quads) ───────────────────────────────────────
-    boundary_raw: dict[str, np.ndarray] = {}
+    # debug output for devs
+    if mesh.axis:
+        logger.info(
+            "imin lies on an axis: %d prisms around it, no boundary faces for %r",
+            mesh.prisms.shape[0], markers["imin"],
+        )
 
-    # imin (i=0)
-    jb, kb = np.meshgrid(np.arange(nj - 1), np.arange(nk - 1), indexing="ij")
-    jb, kb = jb.ravel(), kb.ravel()
-    boundary_raw["imin"] = np.column_stack([
-        nid(0, jb, kb), nid(0, jb, kb + 1),
-        nid(0, jb + 1, kb + 1), nid(0, jb + 1, kb),
-    ])
+    # merge by marker name
+    boundary_elements = _merge_boundaries(boundary_raw, side_names, SIDES_3D)
 
-    # imax (i=ni-1)
-    boundary_raw["imax"] = np.column_stack([
-        nid(ni - 1, jb, kb), nid(ni - 1, jb + 1, kb),
-        nid(ni - 1, jb + 1, kb + 1), nid(ni - 1, jb, kb + 1),
-    ])
-
-    # jmin (j=0)
-    ib, kb2 = np.meshgrid(np.arange(ni - 1), np.arange(nk - 1), indexing="ij")
-    ib, kb2 = ib.ravel(), kb2.ravel()
-    boundary_raw["jmin"] = np.column_stack([
-        nid(ib, 0, kb2), nid(ib + 1, 0, kb2),
-        nid(ib + 1, 0, kb2 + 1), nid(ib, 0, kb2 + 1),
-    ])
-
-    # jmax (j=nj-1)
-    boundary_raw["jmax"] = np.column_stack([
-        nid(ib, nj - 1, kb2), nid(ib, nj - 1, kb2 + 1),
-        nid(ib + 1, nj - 1, kb2 + 1), nid(ib + 1, nj - 1, kb2),
-    ])
-
-    # kmin (k=0)
-    ib2, jb2 = np.meshgrid(np.arange(ni - 1), np.arange(nj - 1), indexing="ij")
-    ib2, jb2 = ib2.ravel(), jb2.ravel()
-    boundary_raw["kmin"] = np.column_stack([
-        nid(ib2, jb2, 0), nid(ib2, jb2 + 1, 0),
-        nid(ib2 + 1, jb2 + 1, 0), nid(ib2 + 1, jb2, 0),
-    ])
-
-    # kmax (k=nk-1)
-    boundary_raw["kmax"] = np.column_stack([
-        nid(ib2, jb2, nk - 1), nid(ib2 + 1, jb2, nk - 1),
-        nid(ib2 + 1, jb2 + 1, nk - 1), nid(ib2, jb2 + 1, nk - 1),
-    ])
-
-    # ── Merge by marker name ─────────────────────────────────────────
-    canonical = list(_SIDES_FOR_AXIS[0]) + list(_SIDES_FOR_AXIS[1]) + list(_SIDES_FOR_AXIS[2])
-    boundary_elements = _merge_boundaries(boundary_raw, markers, canonical)
-
-    return points, elements, boundary_elements
+    return mesh.points, elements, boundary_elements
 
 
 # --------------------------------------------------
@@ -353,10 +339,8 @@ def _write_su2_text(
     fpath: Path,
     ndime: int,
     points: np.ndarray,
-    elements: np.ndarray,
-    elem_etype: int,
-    boundary_elements: dict[str, np.ndarray],
-    bnd_etype: int,
+    elements: dict[int, np.ndarray],
+    boundary_elements: dict[str, dict[int, np.ndarray]],
 ) -> None:
     """Serialize the unstructured representation to SU2 plain text.
 
@@ -364,14 +348,13 @@ def _write_su2_text(
         fpath: Output file path.
         ndime: Number of spatial dimensions (2 or 3).
         points: Node coordinates, shape ``(npoints, ndime)``.
-        elements: Element connectivity, shape ``(nelem, nodes_per_elem)``.
-            Global 0-based node IDs in SU2-native (CCW) order.
-        elem_etype: SU2 element type code for domain elements
-            (9 = quad in 2-D, 12 = hex in 3-D).
-        boundary_elements: Boundary element arrays keyed by marker tag
-            name.  Each value has shape ``(n_belem, nodes_per_belem)``.
-        bnd_etype: SU2 element type code for boundary elements
-            (3 = line in 2-D, 9 = quad face in 3-D).
+        elements: Element connectivity keyed by SU2 element type (9 = quad
+            in 2-D; 12 = hex, 13 = prism in 3-D), each of shape
+            ``(nelem, nodes_per_elem)``.  Global 0-based node IDs in
+            SU2-native order.
+        boundary_elements: Boundary element blocks keyed by marker tag
+            name, then by SU2 element type (3 = line in 2-D; 9 = quad face,
+            5 = triangle in 3-D).
 
     Example:
         Output for a 3×2 structured grid (2 quads, 6 nodes)::
@@ -411,7 +394,7 @@ def _write_su2_text(
     """
 
     # get number of elements and points from shapes of the input arrays
-    nelem = elements.shape[0]
+    nelem = sum(nodes.shape[0] for nodes in elements.values())
     npoints = points.shape[0]
 
     # open file and write su2 format sections
@@ -420,28 +403,33 @@ def _write_su2_text(
         # grid dimension
         f.write(f"NDIME= {ndime}\n")
 
-        # elements (area cells in 2-D, volume cells in 3-D)
+        # elements (area cells in 2-D, volume cells in 3-D), block by block
         # this writes: element type, node IDs, element ID (0-based)
         f.write(f"NELEM= {nelem}\n")
-        for eid in range(nelem):
-            nodes_str = " ".join(str(int(n)) for n in elements[eid])
-            f.write(f"{elem_etype} {nodes_str} {eid}\n")
+        first_id = 0
+        for etype, nodes in elements.items():
+            n_block = nodes.shape[0]
+            element_ids = np.arange(first_id, first_id + n_block)
+            rows = np.column_stack([np.full(n_block, etype), nodes, element_ids])
+            np.savetxt(f, rows, fmt="%d")
+            first_id += n_block
 
         # points
         # write node coordinates and node ID (0-based)
         f.write(f"NPOIN= {npoints}\n")
-        for pid in range(npoints):
-            coords_str = " ".join(_COORD_FMT % c for c in points[pid])
-            f.write(f"{coords_str} {pid}\n")
+        point_rows = np.column_stack([points, np.arange(npoints)])
+        point_fmt = [_COORD_FMT] * points.shape[1] + ["%d"]
+        np.savetxt(f, point_rows, fmt=point_fmt)
 
-        # markers
+        # markers: element type and node IDs per boundary element
         f.write(f"NMARK= {len(boundary_elements)}\n")
-        for tag, belems in boundary_elements.items():
+        for tag, blocks in boundary_elements.items():
+            n_marker = sum(nodes.shape[0] for nodes in blocks.values())
             f.write(f"MARKER_TAG= {tag}\n")
-            f.write(f"MARKER_ELEMS= {belems.shape[0]}\n")
-            for row in belems:
-                nodes_str = " ".join(str(int(n)) for n in row)
-                f.write(f"{bnd_etype} {nodes_str}\n")
+            f.write(f"MARKER_ELEMS= {n_marker}\n")
+            for etype, nodes in blocks.items():
+                rows = np.column_stack([np.full(nodes.shape[0], etype), nodes])
+                np.savetxt(f, rows, fmt="%d")
 
 
 # --------------------------------------------------
@@ -489,23 +477,14 @@ def write_su2(fpath: str | Path, dataset: Dataset) -> Path:
         dataset.grid, markers
     )
 
-    # Determine SU2 element types
-    if ndim == 2:
-        elem_etype = _SU2_QUAD
-        bnd_etype = _SU2_LINE
-    else:
-        elem_etype = _SU2_HEX
-        bnd_etype = _SU2_QUAD
+    # write to su2 text file (the element types travel with the blocks)
+    _write_su2_text(fpath, ndim, points, elements, boundary_elements)
 
-    # write to su2 text file
-    _write_su2_text(
-        fpath, ndim, points, elements, elem_etype,
-        boundary_elements, bnd_etype,
-    )
-
+    # debug output for devs
+    n_elements = sum(nodes.shape[0] for nodes in elements.values())
     logger.info(
         "wrote %s  (NDIME=%d, NELEM=%d, NPOIN=%d, NMARK=%d)",
-        fpath, ndim, elements.shape[0], points.shape[0],
+        fpath, ndim, n_elements, points.shape[0],
         len(boundary_elements),
     )
 

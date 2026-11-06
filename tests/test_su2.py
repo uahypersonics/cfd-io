@@ -13,6 +13,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from revolved import revolved_sector
 
 from cfd_io.dataset import Dataset, StructuredGrid
 from cfd_io.writers.su2 import (
@@ -98,9 +99,12 @@ class TestGoldReference2D:
     def setup_method(self):
         grid = _make_grid_3x2()
         markers = _make_markers_3x2()
-        self.points, self.elements, self.boundaries = (
+        self.points, element_blocks, boundary_blocks = (
             structured_to_unstructured(grid, markers)
         )
+        # one element type in 2-D: quads, and lines on the boundaries
+        self.elements = element_blocks[9]
+        self.boundaries = {tag: blocks[3] for tag, blocks in boundary_blocks.items()}
 
     def test_point_count(self):
         assert self.points.shape == (6, 2)
@@ -169,9 +173,12 @@ class TestOrientation2D:
     def setup_method(self):
         grid = _make_grid_3x2()
         markers = _make_markers_3x2()
-        self.points, self.elements, self.boundaries = (
+        self.points, element_blocks, boundary_blocks = (
             structured_to_unstructured(grid, markers)
         )
+        # one element type in 2-D: quads, and lines on the boundaries
+        self.elements = element_blocks[9]
+        self.boundaries = {tag: blocks[3] for tag, blocks in boundary_blocks.items()}
 
     def test_adjacent_quads_share_two_nodes(self):
         """Adjacent quads must share exactly 2 nodes (one edge)."""
@@ -333,7 +340,7 @@ class TestDuplicateMarkers:
         # "farfield" should appear once with concatenated segments
         assert "farfield" in boundaries
         # imin has 1 segment, imax has 1 segment → merged = 2 segments
-        assert boundaries["farfield"].shape == (2, 2)
+        assert boundaries["farfield"][3].shape == (2, 2)
 
     def test_merged_block_position(self):
         """Merged marker appears at the position of the first contributing side."""
@@ -360,9 +367,13 @@ class TestConversion3D:
     def setup_method(self):
         grid = _make_grid_3d(3, 3, 3)
         markers = _make_markers_3d()
-        self.points, self.elements, self.boundaries = (
+        self.points, element_blocks, boundary_blocks = (
             structured_to_unstructured(grid, markers)
         )
+        # no axis: hexes, and quad faces on the boundaries
+        assert list(element_blocks) == [12]
+        self.elements = element_blocks[12]
+        self.boundaries = {tag: blocks[9] for tag, blocks in boundary_blocks.items()}
         self.ni, self.nj, self.nk = 3, 3, 3
 
     def test_point_count(self):
@@ -529,3 +540,64 @@ class TestDispatch:
         assert out.exists()
         text = out.read_text()
         assert text.startswith("NDIME= 2")
+
+
+# =====================================================================
+#  3-D axis: prisms and triangles
+# =====================================================================
+
+def _su2_flips(points: np.ndarray, nodes: np.ndarray, corners: list[int]) -> np.ndarray:
+    """SU2's orientation test (CPhysicalGeometry::Check_IntElem_Orientation, checkTetra).
+
+    True where SU2 would flip the element: the triple product of the edges from
+    corners[0] to corners[1], [2] and [3] is negative.
+    """
+    p0, p1, p2, p3 = (points[nodes[:, c]] for c in corners)
+    triple = np.einsum("ij,ij->i", np.cross(p1 - p0, p2 - p0), p3 - p0)
+    return triple < 0.0
+
+
+class TestAxis3D:
+    """A revolved sector with its face i = 0 on the axis."""
+
+    def setup_method(self):
+        self.ni, self.nj, self.nk = 9, 5, 7
+        dataset = revolved_sector(self.ni, self.nj, self.nk)
+        markers = dataset.attrs["markers"]["structured"]
+        self.points, self.elements, self.boundaries = (
+            structured_to_unstructured(dataset.grid, markers)
+        )
+
+    def test_axis_points_merged(self):
+        # one node per axis line instead of nk
+        n_nodes = self.ni * self.nj * self.nk - self.nj * (self.nk - 1)
+        assert self.points.shape == (n_nodes, 3)
+
+    def test_prisms_at_the_axis(self):
+        cells_j, cells_k = self.nj - 1, self.nk - 1
+        assert self.elements[13].shape == (cells_j * cells_k, 6)
+        assert self.elements[12].shape == ((self.ni - 2) * cells_j * cells_k, 8)
+
+    def test_elements_pass_su2_orientation_check(self):
+        # the two tests SU2 runs per prism and the first two per hexahedron
+        prisms = self.elements[13]
+        hexes = self.elements[12]
+        assert not np.any(_su2_flips(self.points, prisms, [0, 2, 1, 3]))
+        assert not np.any(_su2_flips(self.points, prisms, [3, 4, 5, 2]))
+        assert not np.any(_su2_flips(self.points, hexes, [0, 1, 2, 5]))
+        assert not np.any(_su2_flips(self.points, hexes, [0, 2, 3, 7]))
+
+    def test_axis_has_no_marker(self):
+        assert list(self.boundaries) == ["outflow", "wall", "farfield", "sweep_low", "sweep_high"]
+
+    def test_triangles_where_wall_and_farfield_touch_the_axis(self):
+        cells_i, cells_k = self.ni - 1, self.nk - 1
+        for tag in ("wall", "farfield"):
+            assert self.boundaries[tag][5].shape == (cells_k, 3)
+            assert self.boundaries[tag][9].shape == ((cells_i - 1) * cells_k, 4)
+
+    def test_file_lists_prisms_and_triangles(self, tmp_path):
+        path = write_su2(tmp_path / "sector.su2", revolved_sector(self.ni, self.nj, self.nk))
+        lines = path.read_text().splitlines()
+        assert sum(line.startswith("13 ") for line in lines) == (self.nj - 1) * (self.nk - 1)
+        assert sum(line.startswith("5 ") for line in lines) == 2 * (self.nk - 1)
