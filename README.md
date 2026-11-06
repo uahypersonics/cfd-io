@@ -61,7 +61,7 @@ pytest tests/ --cov --cov-report=term-missing \
 
 ## Documentation
 
-Full documentation: https://uahypersonics.github.io/cfd-io
+Documentation (installation for now): https://uahypersonics.github.io/cfd-io
 
 ## Citation
 
@@ -95,12 +95,8 @@ This project uses [Semantic Versioning](https://semver.org/) (`vMAJOR.MINOR.PATC
 To publish a new version to [PyPI](https://pypi.org/project/cfd-io/):
 
 1. Update the version in `pyproject.toml`
-2. Regenerate the API architecture diagram:
-   ```bash
-   pydeps src/cfd_io --noshow --max-bacon=4 --cluster -o docs/assets/architecture.svg
-   ```
-3. Commit and push to `main`
-4. Tag and push:
+2. Commit and push to `main`
+3. Tag and push:
    ```bash
    git tag -a vMAJOR.MINOR.PATCH -m "Release vMAJOR.MINOR.PATCH"
    git push origin vMAJOR.MINOR.PATCH

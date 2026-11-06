@@ -93,18 +93,3 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Installation: installation.md
-  - User Guide:
-    - user-guide/index.md
-    - CLI Usage: user-guide/cli.md
-    - Python API Usage: user-guide/api-usage.md
-    - Variable Naming Convention: user-guide/variable-names.md
-  - Downloads: downloads.md
-  - API Reference:
-    - api/index.md
-    - Architecture: api/architecture.md
-    - read_file: api/read.md
-    - write_file: api/write.md
-    - do_convert: api/convert.md
-    - get_info / FileInfo: api/info.md
-    - Readers: api/readers.md
-    - Writers: api/writers.md
