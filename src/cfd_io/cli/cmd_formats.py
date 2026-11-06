@@ -19,9 +19,9 @@ def cmd_formats() -> None:
         # show readers and writers
         cfd-io formats
     """
-    from cfd_io.convert_mod import _READER_REGISTRY, _WRITER_REGISTRY
+    from cfd_io.convert_mod import _READERS, _WRITERS
 
-    readers = " ".join(sorted(_READER_REGISTRY))
-    writers = " ".join(sorted(_WRITER_REGISTRY))
+    readers = " ".join(sorted(_READERS))
+    writers = " ".join(sorted(_WRITERS))
     typer.echo(f"Readers:  {readers}")
     typer.echo(f"Writers:  {writers}")

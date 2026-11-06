@@ -20,6 +20,7 @@ from typing import Any
 
 import numpy as np
 
+from cfd_io.dataset import Dataset, Field, StructuredGrid
 from cfd_io.readers._aliases import normalize
 
 # --------------------------------------------------
@@ -590,15 +591,15 @@ def read_binary_direct_xyz_volume(
 
 
 # --------------------------------------------------
-# read bindary data with direct access, returning dict-of-arrays for grid and flow variables
+# read binary data with direct access, returning a Dataset of the grid and flow variables
 # --------------------------------------------------
 def read_binary_direct(
     fpath: str | Path,
     gpath: str | Path,
     *,
     it: int = 1,
-) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], dict[str, Any]]:
-    """Read IOS grid and flow binary files into dict-of-arrays form.
+) -> Dataset:
+    """Read IOS grid and flow binary files into a Dataset.
 
     Reads the companion ``.cd`` header files to determine grid
     dimensions and variable names.
@@ -609,12 +610,14 @@ def read_binary_direct(
         it: Timestep index (1-based).  Default 1.
 
     Returns:
-        Tuple of ``(grid, flow, attrs)`` where:
+        ``Dataset`` with:
 
-        - **grid** -- ``{"x": ndarray, "y": ndarray}`` each ``(nx, ny, nz)``
-        - **flow** -- ``{"pres": ndarray, ...}`` each ``(nx, ny, nz)``
-        - **attrs** -- dict with ``"info_lines"``,
-            ``"timesteps"`` if present in the ``.cd`` file
+        - **grid** -- ``StructuredGrid`` of the grid file's ``x``, ``y`` and ``z``
+          (zeros if the grid file has no ``z``), each ``(nx, ny, nz)``
+        - **flow** -- one ``Field`` per flow variable (e.g. ``"pres"``),
+          each ``(nx, ny, nz)``
+        - **attrs** -- ``"info_lines"`` and ``"timesteps"`` if present in
+          the flow file's ``.cd`` header
 
     Raises:
         FileNotFoundError: If any input file or its ``.cd`` companion
@@ -639,10 +642,10 @@ def read_binary_direct(
             f"grid .cd header has no variable names: {gpath_header}"
         )
 
-    # conviencience alias for grid variable names (e.g. "x", "y", "z")
+    # convenience alias for grid variable names (e.g. "x", "y", "z")
     grid_names = grid_header.var_names
 
-    # intiailze empty grid dict
+    # initialize empty grid dict
     grid: dict[str, np.ndarray] = {}
 
     # read each grid variable into the grid dict using the variable names from the header
@@ -664,10 +667,10 @@ def read_binary_direct(
             f"flow .cd header has no variable names: {fpath_header}"
         )
 
-    # conviencience alias for flow variable names (e.g. "pres", "vel")
+    # convenience alias for flow variable names (e.g. "pres", "vel")
     flow_names = flow_header.var_names
 
-    # intiailze empty flow dict
+    # initialize empty flow dict
     flow: dict[str, np.ndarray] = {}
 
     for ivar, var_name in enumerate(flow_names, 1):
@@ -684,8 +687,6 @@ def read_binary_direct(
 
     # debug output for devs
     logger.info("loaded grid (%d vars) + flow (%d vars)", len(grid), len(flow))
-
-    from cfd_io.dataset import Dataset, Field, StructuredGrid
 
     return Dataset(
         grid=StructuredGrid(grid["x"], grid["y"], grid.get("z", np.zeros_like(grid["x"]))),
