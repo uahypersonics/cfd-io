@@ -7,8 +7,8 @@ authors:
   - family-names: "Hader"
     given-names: "Christoph"
     orcid: "https://orcid.org/0000-0002-0956-000X"
-repository-code: "https://github.com/uahypersonics/cfd-io"
-url: "https://uahypersonics.github.io/cfd-io"
+repository-code: "https://github.com/hypersonic-aero/cfd-io"
+url: "https://hypersonic-aero.github.io/cfd-io"
 doi: "10.5281/zenodo.18926271"
 license: GPL-3.0-or-later
 keywords:

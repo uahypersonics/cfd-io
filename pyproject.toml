@@ -49,8 +49,8 @@ docs = [
 cfd-io = "cfd_io.cli.app:app"
 
 [project.urls]
-Homepage = "https://github.com/uahypersonics/cfd-io"
-Repository = "https://github.com/uahypersonics/cfd-io"
+Homepage = "https://github.com/hypersonic-aero/cfd-io"
+Repository = "https://github.com/hypersonic-aero/cfd-io"
 
 [tool.setuptools.packages.find]
 where = ["src"]

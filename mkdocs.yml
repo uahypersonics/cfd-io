@@ -4,15 +4,15 @@
 # site metadata
 # --------------------------------------------------
 site_name: cfd-io
-site_url: https://uahypersonics.github.io/cfd-io
+site_url: https://hypersonic-aero.github.io/cfd-io
 site_author: Christoph Hader
 site_description: CFD I/O toolkit -- read, write, and convert between formats.
 
 # --------------------------------------------------
 # github repository (adds link in top right corner)
 # --------------------------------------------------
-repo_name: uahypersonics/cfd-io
-repo_url: https://github.com/uahypersonics/cfd-io
+repo_name: hypersonic-aero/cfd-io
+repo_url: https://github.com/hypersonic-aero/cfd-io
 edit_uri: edit/main/docs/
 
 # --------------------------------------------------

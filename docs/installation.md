@@ -22,7 +22,7 @@ pip install cfd-io[tecplot]
 ## From Source
 
 ```bash
-git clone https://github.com/uahypersonics/cfd-io.git
+git clone https://github.com/hypersonic-aero/cfd-io.git
 cd cfd-io
 pip install -e .
 ```
